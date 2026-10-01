@@ -7,10 +7,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 object BaseUrls {
-    const val EMULATOR = "http://10.0.2.2:43123"
-    const val DEVICE = "http://127.0.0.1:43123"
-
-    fun defaultFor(emulator: Boolean): String = if (emulator) EMULATOR else DEVICE
+    const val DEFAULT = "https://macro-important-port-dollar.trycloudflare.com"
 
     fun normalize(input: String): String? {
         val trimmed = input.trim().trimEnd('/')

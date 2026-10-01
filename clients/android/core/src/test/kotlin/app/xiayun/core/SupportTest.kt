@@ -9,9 +9,13 @@ import java.time.ZoneOffset
 
 class SupportTest {
     @Test
-    fun defaultBaseUrlDependsOnEmulator() {
-        assertEquals("http://10.0.2.2:43123", BaseUrls.defaultFor(true))
-        assertEquals("http://127.0.0.1:43123", BaseUrls.defaultFor(false))
+    fun defaultBaseUrlIsTheLiveHttpsHost() {
+        assertEquals(
+            "https://macro-important-port-dollar.trycloudflare.com",
+            BaseUrls.DEFAULT,
+        )
+        assertFalse(BaseUrls.DEFAULT.endsWith("/"))
+        assertEquals(BaseUrls.DEFAULT, BaseUrls.normalize(BaseUrls.DEFAULT))
     }
 
     @Test

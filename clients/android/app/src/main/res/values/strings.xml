@@ -23,7 +23,7 @@
     <string name="server">伺服器位址</string>
     <string name="server_save">儲存</string>
     <string name="cancel">取消</string>
-    <string name="server_help">模擬器預設是 10.0.2.2，讓 App 連到電腦上的匣雲。其他裝置預設是 127.0.0.1。</string>
+    <string name="server_help">一般安裝會連到預設伺服器。只有要改位址時才填這裡。</string>
     <string name="password_mismatch">兩次輸入的密碼不一樣</string>
     <string name="password_short">密碼至少需要 8 個字元</string>
     <string name="need_email">請先輸入電子郵件</string>

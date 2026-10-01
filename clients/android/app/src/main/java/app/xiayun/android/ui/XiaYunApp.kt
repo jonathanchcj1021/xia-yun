@@ -64,7 +64,7 @@ fun XiaYunApp(
             onPassword = { appModel.usePassword() },
         )
         Phase.SignedOut -> AuthScreen(
-            baseUrl = state.baseUrl.ifBlank { BaseUrls.defaultFor(false) },
+            baseUrl = state.baseUrl.ifBlank { BaseUrls.DEFAULT },
             busy = state.busy,
             passkeyBusy = passkeyBusy,
             error = state.error,

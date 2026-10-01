@@ -4,9 +4,7 @@ Kotlin / Jetpack Compose 客戶端。介面是繁體中文。只放在 `clients/
 
 ## 伺服器
 
-在倉庫根目錄啟動網頁服務，它會聽 `0.0.0.0:43123`。
-
-模擬器預設位址是 `http://10.0.2.2:43123`（連到電腦上的服務）。其他裝置預設 `http://127.0.0.1:43123`。登入畫面可以改。
+一般安裝預設連到 `https://macro-important-port-dollar.trycloudflare.com`。登入畫面裡的伺服器位址可以改成別的位址，但沒有改過的話不會連到本機。
 
 登入與通行密鑰驗證會送 `client: "native"`，並把回應的 `token` 放進 `Authorization: Bearer`。註冊回應只有 `session` cookie；這顆 cookie 的值與 bearer token 是同一組工作階段密鑰，客戶端會把它當成 Bearer 使用。
 

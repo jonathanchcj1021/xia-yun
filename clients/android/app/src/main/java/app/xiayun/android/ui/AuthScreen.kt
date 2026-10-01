@@ -32,7 +32,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import app.xiayun.core.BaseUrls
 import app.xiayun.core.Limits
 
 @Composable
@@ -215,7 +214,7 @@ fun AuthScreen(
             text = {
                 Column {
                     Text(
-                        "模擬器預設是 ${BaseUrls.EMULATOR}。其他裝置預設是 ${BaseUrls.DEVICE}。",
+                        "一般安裝會連到預設伺服器。只有要改位址時才填這裡。",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Spacer(Modifier.height(12.dp))

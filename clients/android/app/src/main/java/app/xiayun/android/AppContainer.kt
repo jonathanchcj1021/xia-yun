@@ -1,14 +1,11 @@
 package app.xiayun.android
 
 import android.content.Context
-import android.os.Build
 import app.xiayun.android.session.AndroidSessionStore
 import app.xiayun.core.AuthSession
 import app.xiayun.core.BaseUrls
-import app.xiayun.core.DeviceHints
 import app.xiayun.core.SessionGate
 import app.xiayun.core.XiaYunApi
-import app.xiayun.core.isEmulator
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -23,7 +20,7 @@ class AppContainer(context: Context) {
     fun baseUrl(): String {
         val saved = settings.getString(KEY_URL, null)
         if (!saved.isNullOrBlank()) return saved
-        return BaseUrls.defaultFor(isEmulator(deviceHints()))
+        return BaseUrls.DEFAULT
     }
 
     fun setBaseUrl(url: String) {
@@ -35,16 +32,6 @@ class AppContainer(context: Context) {
     fun notifyUnauthorized() {
         unauthorized.tryEmit(Unit)
     }
-
-    private fun deviceHints() = DeviceHints(
-        fingerprint = Build.FINGERPRINT.orEmpty(),
-        model = Build.MODEL.orEmpty(),
-        hardware = Build.HARDWARE.orEmpty(),
-        product = Build.PRODUCT.orEmpty(),
-        manufacturer = Build.MANUFACTURER.orEmpty(),
-        brand = Build.BRAND.orEmpty(),
-        device = Build.DEVICE.orEmpty(),
-    )
 
     companion object {
         private const val KEY_URL = "base_url"
