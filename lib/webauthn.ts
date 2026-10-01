@@ -25,7 +25,11 @@ type PasskeyRow = {
   transports: string | null;
   device_type: string | null;
   backed_up: number;
+  rp_id: string | null;
 };
+
+const NO_PASSKEY_ON_THIS_SITE =
+  "這個帳號在這個網站還沒有通行密鑰。請先用密碼登入，再按「註冊通行密鑰」。" as const;
 
 export function webAuthnContext(request: NextRequest) {
   const hostHeader = (request.headers.get("host") ?? request.nextUrl.host)
@@ -112,13 +116,13 @@ function takeChallenge(input: {
   return row.challenge;
 }
 
-function listPasskeys(userId: string) {
+function listPasskeys(userId: string, rpID: string) {
   return getDb()
     .prepare(
-      `SELECT credential_id, user_id, public_key, counter, transports, device_type, backed_up
-       FROM passkeys WHERE user_id = ?`,
+      `SELECT credential_id, user_id, public_key, counter, transports, device_type, backed_up, rp_id
+       FROM passkeys WHERE user_id = ? AND rp_id = ?`,
     )
-    .all(userId) as unknown as PasskeyRow[];
+    .all(userId, rpID) as unknown as PasskeyRow[];
 }
 
 function parseTransports(value: string | null) {
@@ -143,7 +147,7 @@ function toCredential(row: PasskeyRow) {
 
 export async function registrationOptions(request: NextRequest, user: { id: string; email: string }) {
   const { rpID, rpName } = webAuthnContext(request);
-  const existing = listPasskeys(user.id);
+  const existing = listPasskeys(user.id, rpID);
   const options = await generateRegistrationOptions({
     rpName,
     rpID,
@@ -192,8 +196,8 @@ export async function verifyRegistration(
   getDb()
     .prepare(
       `INSERT INTO passkeys
-        (credential_id, user_id, public_key, counter, transports, device_type, backed_up, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        (credential_id, user_id, public_key, counter, transports, device_type, backed_up, created_at, rp_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       credential.id,
@@ -204,6 +208,7 @@ export async function verifyRegistration(
       verified.registrationInfo.credentialDeviceType,
       verified.registrationInfo.credentialBackedUp ? 1 : 0,
       Date.now(),
+      rpID,
     );
   return { ok: true as const };
 }
@@ -212,11 +217,11 @@ export async function loginOptions(request: NextRequest, email: string) {
   const user = getDb()
     .prepare("SELECT id FROM users WHERE email = ?")
     .get(email) as { id: string } | undefined;
-  const passkeys = user ? listPasskeys(user.id) : [];
-  if (!user || passkeys.length === 0) {
-    return { error: "無法使用通行密鑰登入" as const };
-  }
   const { rpID } = webAuthnContext(request);
+  const passkeys = user ? listPasskeys(user.id, rpID) : [];
+  if (!user || passkeys.length === 0) {
+    return { error: NO_PASSKEY_ON_THIS_SITE };
+  }
   const options = await generateAuthenticationOptions({
     rpID,
     allowCredentials: passkeys.map((row) => ({
@@ -240,9 +245,9 @@ export async function verifyLogin(
     .prepare("SELECT id, email, created_at FROM users WHERE email = ?")
     .get(email) as { id: string; email: string; created_at: number } | undefined;
   if (!user) return { error: "通行密鑰驗證失敗" as const };
-  const row = listPasskeys(user.id).find((item) => item.credential_id === response.id);
-  if (!row) return { error: "通行密鑰驗證失敗" as const };
   const { rpID, origin } = webAuthnContext(request);
+  const row = listPasskeys(user.id, rpID).find((item) => item.credential_id === response.id);
+  if (!row) return { error: NO_PASSKEY_ON_THIS_SITE };
   let verified: Awaited<ReturnType<typeof verifyAuthenticationResponse>>;
   try {
     verified = await verifyAuthenticationResponse({

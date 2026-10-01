@@ -45,10 +45,17 @@ function migrate(database: DatabaseSync) {
       transports TEXT,
       device_type TEXT,
       backed_up INTEGER NOT NULL DEFAULT 0,
-      created_at INTEGER NOT NULL
+      created_at INTEGER NOT NULL,
+      rp_id TEXT
     );
 
     CREATE INDEX IF NOT EXISTS passkeys_user ON passkeys (user_id);
+  `);
+  const columns = database.prepare("PRAGMA table_info(passkeys)").all() as { name: string }[];
+  if (!columns.some((column) => column.name === "rp_id")) {
+    database.exec("ALTER TABLE passkeys ADD COLUMN rp_id TEXT");
+  }
+  database.exec(`
 
     CREATE TABLE IF NOT EXISTS webauthn_challenges (
       id TEXT PRIMARY KEY,

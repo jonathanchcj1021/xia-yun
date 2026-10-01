@@ -41,7 +41,7 @@ npm run dev
 | GET | `/api/auth/me` | 目前使用者。接受 cookie 或 Bearer。 |
 | POST | `/api/auth/passkey/register/options` | 已登入（cookie 或 Bearer）。回傳 WebAuthn 註冊選項。 |
 | POST | `/api/auth/passkey/register/verify` | 已登入。JSON 本體是瀏覽器的註冊結果。 |
-| POST | `/api/auth/passkey/login/options` | JSON `{ "email" }`。回傳 WebAuthn 登入選項。 |
+| POST | `/api/auth/passkey/login/options` | JSON `{ "email" }`。這個網站已有通行密鑰時回傳 WebAuthn 登入選項；否則 `400`，請改用密碼登入後按「註冊通行密鑰」。 |
 | POST | `/api/auth/passkey/login/verify` | JSON `{ "email", "response", "client"? }`。成功時設定 cookie；`client` 為 `"native"` 時另含 `token`。 |
 | GET | `/api/items` | 自己的項目，新的在前。清單不含筆記全文，文字項目有 `excerpt`。 |
 | POST | `/api/items` | 檔案用 `multipart/form-data`；筆記用 JSON `{ "type": "text", "title", "body" }`。 |
@@ -55,7 +55,7 @@ npm run dev
 
 - 網頁登入只設定 httpOnly cookie `session`（`SameSite=Lax`、`Path=/`、30 天），JavaScript 讀不到。原生客戶端要在 `POST /api/auth/login` 或 `POST /api/auth/passkey/login/verify` 加上 `"client": "native"`，把回應裡的 `token` 存起來，之後送 `Authorization: Bearer <token>`。這顆 token 與 cookie 是同一筆工作階段。
 - `GET /api/auth/me`、所有 `/api/items`，以及通行密鑰註冊兩支路由接受 Bearer。若請求帶了 `Authorization` 但 token 無效，不會再退回 cookie。
-- 通行密鑰的 RP ID 是請求的 hostname，不含連接埠。在 `localhost` 註冊的密鑰不能用在 Cloudflare 網域或其他 hostname，反過來也不行。瀏覽器會拒絕 IP 位址（例如 `127.0.0.1`）當 RP ID，所以本機請用 `http://localhost:43123`。WebAuthn 需要 HTTPS，或 `http://localhost`。
+- 通行密鑰的 RP ID 是請求的 hostname，不含連接埠，而且只會拿來登入同一個網站。在 `localhost` 註冊的密鑰不能用在 Cloudflare 網域或其他 hostname。這個網站還沒有通行密鑰時，登入選項回 `400`：`這個帳號在這個網站還沒有通行密鑰。請先用密碼登入，再按「註冊通行密鑰」。` 瀏覽器會拒絕 IP 位址（例如 `127.0.0.1`）當 RP ID，所以本機請用 `http://localhost:43123`。WebAuthn 需要 HTTPS，或 `http://localhost`。
 - 挑戰 5 分鐘內有效，而且只能用一次。登入必須帶電子郵件，這個版本不會做無帳號提示的 discoverable 登入。
 - `Secure` 只在 HTTPS 時設定。本機 HTTP 不會加 `Secure`。
 - 這個版本沒有 CORS 標頭。原生 App 不是瀏覽器，不需要 CORS；瀏覽器跨網域呼叫則尚未開放。

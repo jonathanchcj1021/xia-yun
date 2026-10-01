@@ -14,7 +14,11 @@ export async function POST(request: NextRequest) {
   if (!email) return jsonError(400, "VALIDATION", "請輸入有效的電子郵件");
   const result = await loginOptions(request, email);
   if ("error" in result) {
-    return jsonError(400, "WEBAUTHN", result.error ?? "無法使用通行密鑰登入");
+    return jsonError(
+      400,
+      "WEBAUTHN",
+      result.error ?? "這個帳號在這個網站還沒有通行密鑰。請先用密碼登入，再按「註冊通行密鑰」。",
+    );
   }
   return jsonOk(result.options);
 }
