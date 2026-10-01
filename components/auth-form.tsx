@@ -3,12 +3,26 @@
 import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { startAuthentication } from "@simplewebauthn/browser";
 import { Mark } from "@/components/mark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 type Mode = "login" | "register";
+
+function passkeyBrowserMessage(error: unknown) {
+  if (error instanceof Error && error.name === "NotAllowedError") {
+    return "通行密鑰已取消，或這台裝置拒絕了要求。";
+  }
+  if (error instanceof Error && error.name === "InvalidStateError") {
+    return "這支通行密鑰已經註冊過。";
+  }
+  if (error instanceof Error && error.name === "SecurityError") {
+    return "這個網址不能使用通行密鑰。請改用 localhost 或網域名稱。";
+  }
+  return "通行密鑰沒有完成。";
+}
 
 function useHydrated() {
   return useSyncExternalStore(
@@ -35,6 +49,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [passkeyPending, setPasskeyPending] = useState(false);
   const ready = useHydrated();
   const router = useRouter();
 
@@ -65,6 +80,44 @@ export function AuthForm({ mode }: { mode: Mode }) {
     } catch {
       setError("無法連線，請稍後再試");
       setPending(false);
+    }
+  }
+
+  async function loginWithPasskey() {
+    setError(null);
+    if (!email.trim()) {
+      setError("請先輸入電子郵件");
+      return;
+    }
+    setPasskeyPending(true);
+    try {
+      const optionsResponse = await fetch("/api/auth/passkey/login/options", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      if (!optionsResponse.ok) {
+        setError(await errorMessage(optionsResponse));
+        setPasskeyPending(false);
+        return;
+      }
+      const optionsJSON = await optionsResponse.json();
+      const assertion = await startAuthentication({ optionsJSON });
+      const verifyResponse = await fetch("/api/auth/passkey/login/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, response: assertion }),
+      });
+      if (!verifyResponse.ok) {
+        setError(await errorMessage(verifyResponse));
+        setPasskeyPending(false);
+        return;
+      }
+      router.refresh();
+      router.push("/");
+    } catch (caught) {
+      setError(passkeyBrowserMessage(caught));
+      setPasskeyPending(false);
     }
   }
 
@@ -142,7 +195,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
               {error}
             </p>
           ) : null}
-          <Button type="submit" className="h-11" disabled={!ready || pending}>
+          <Button type="submit" className="h-11" disabled={!ready || pending || passkeyPending}>
             {pending
               ? isRegister
                 ? "建立中…"
@@ -151,6 +204,17 @@ export function AuthForm({ mode }: { mode: Mode }) {
                 ? "建立帳號"
                 : "登入"}
           </Button>
+          {isRegister ? null : (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11"
+              disabled={!ready || pending || passkeyPending}
+              onClick={() => void loginWithPasskey()}
+            >
+              {passkeyPending ? "等待裝置確認…" : "用通行密鑰登入"}
+            </Button>
+          )}
         </form>
         <p className="mt-6 text-sm text-muted-foreground">
           {isRegister ? (

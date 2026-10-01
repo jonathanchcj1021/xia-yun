@@ -45,7 +45,7 @@ export function Welcome() {
             </Button>
           </div>
           <p className="mt-6 max-w-xl text-sm leading-6 text-muted-foreground">
-            目前使用電子郵件與密碼。下一步會在網頁加上 WebAuthn，原生 App 再接系統生物辨識。
+            登入可以用電子郵件與密碼，或用已註冊的通行密鑰。原生 App 之後用同一支 API 與 Bearer token。
           </p>
         </section>
         <aside className="rounded-2xl bg-card p-5 ring-1 ring-foreground/10">

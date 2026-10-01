@@ -7,14 +7,8 @@ const globalForDb = globalThis as unknown as { xiayunDb?: DatabaseSync };
 export const dataDir = path.join(process.cwd(), "data");
 export const blobDir = path.join(dataDir, "blobs");
 
-function openDatabase() {
-  fs.mkdirSync(blobDir, { recursive: true });
-  const database = new DatabaseSync(path.join(dataDir, "app.sqlite"));
+function migrate(database: DatabaseSync) {
   database.exec(`
-    PRAGMA journal_mode = WAL;
-    PRAGMA foreign_keys = ON;
-    PRAGMA busy_timeout = 5000;
-
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       email TEXT NOT NULL UNIQUE,
@@ -42,13 +36,48 @@ function openDatabase() {
 
     CREATE INDEX IF NOT EXISTS items_user_created
       ON items (user_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS passkeys (
+      credential_id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      public_key TEXT NOT NULL,
+      counter INTEGER NOT NULL,
+      transports TEXT,
+      device_type TEXT,
+      backed_up INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS passkeys_user ON passkeys (user_id);
+
+    CREATE TABLE IF NOT EXISTS webauthn_challenges (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      email TEXT,
+      purpose TEXT NOT NULL CHECK (purpose IN ('register', 'login')),
+      challenge TEXT NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
   `);
+}
+
+function openDatabase() {
+  fs.mkdirSync(blobDir, { recursive: true });
+  const database = new DatabaseSync(path.join(dataDir, "app.sqlite"));
+  database.exec(`
+    PRAGMA journal_mode = WAL;
+    PRAGMA foreign_keys = ON;
+    PRAGMA busy_timeout = 5000;
+  `);
+  migrate(database);
   return database;
 }
 
 export function getDb() {
   if (!globalForDb.xiayunDb) {
     globalForDb.xiayunDb = openDatabase();
+  } else {
+    migrate(globalForDb.xiayunDb);
   }
   return globalForDb.xiayunDb;
 }

@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { startRegistration } from "@simplewebauthn/browser";
 import {
   Download,
   FileText,
+  Fingerprint,
   ImageIcon,
   Loader2,
   LogOut,
@@ -88,6 +90,8 @@ export function LibraryApp({ user }: { user: PublicUser }) {
   const [uploading, setUploading] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [passkeyPending, setPasskeyPending] = useState(false);
+  const [passkeyNotice, setPasskeyNotice] = useState<string | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteTitle, setNoteTitle] = useState("");
   const [noteBody, setNoteBody] = useState("");
@@ -135,6 +139,52 @@ export function LibraryApp({ user }: { user: PublicUser }) {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [loadItems]);
+
+  async function registerPasskey() {
+    setPasskeyNotice(null);
+    setActionError(null);
+    setPasskeyPending(true);
+    try {
+      const optionsResponse = await fetch("/api/auth/passkey/register/options", {
+        method: "POST",
+      });
+      if (optionsResponse.status === 401) {
+        goToLogin();
+        return;
+      }
+      if (!optionsResponse.ok) {
+        setPasskeyNotice(await errorMessage(optionsResponse));
+        setPasskeyPending(false);
+        return;
+      }
+      const optionsJSON = await optionsResponse.json();
+      const attestation = await startRegistration({ optionsJSON });
+      const verifyResponse = await fetch("/api/auth/passkey/register/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(attestation),
+      });
+      if (!verifyResponse.ok) {
+        setPasskeyNotice(await errorMessage(verifyResponse));
+        setPasskeyPending(false);
+        return;
+      }
+      setPasskeyNotice("通行密鑰已註冊。下次可以用它登入這個帳號。");
+      setPasskeyPending(false);
+    } catch (caught) {
+      const name = caught instanceof Error ? caught.name : "";
+      setPasskeyNotice(
+        name === "NotAllowedError"
+          ? "通行密鑰已取消，或這台裝置拒絕了要求。"
+          : name === "InvalidStateError"
+            ? "這支通行密鑰已經註冊過。"
+            : name === "SecurityError"
+              ? "這個網址不能使用通行密鑰。請改用 localhost 或網域名稱。"
+              : "通行密鑰沒有完成。",
+      );
+      setPasskeyPending(false);
+    }
+  }
 
   async function logout() {
     setLoggingOut(true);
@@ -265,16 +315,32 @@ export function LibraryApp({ user }: { user: PublicUser }) {
               <p className="truncate text-xs text-muted-foreground">{user.email}</p>
             </div>
           </div>
-          <Button
-            variant="outline"
-            className="h-10"
-            onClick={() => void logout()}
-            disabled={loggingOut}
-          >
-            <LogOut />
-            {loggingOut ? "登出中…" : "登出"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              className="h-10"
+              onClick={() => void registerPasskey()}
+              disabled={passkeyPending || loggingOut}
+            >
+              <Fingerprint />
+              {passkeyPending ? "等待裝置確認…" : "註冊通行密鑰"}
+            </Button>
+            <Button
+              variant="outline"
+              className="h-10"
+              onClick={() => void logout()}
+              disabled={loggingOut || passkeyPending}
+            >
+              <LogOut />
+              {loggingOut ? "登出中…" : "登出"}
+            </Button>
+          </div>
         </div>
+        {passkeyNotice ? (
+          <p role="status" className="px-4 pb-3 text-sm text-muted-foreground">
+            {passkeyNotice}
+          </p>
+        ) : null}
       </header>
 
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-6 sm:py-8">

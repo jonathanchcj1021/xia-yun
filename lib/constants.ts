@@ -32,4 +32,7 @@ export type ErrorCode =
   | "INVALID_CREDENTIALS"
   | "NOT_FOUND"
   | "PAYLOAD_TOO_LARGE"
-  | "UNSUPPORTED_MEDIA";
+  | "UNSUPPORTED_MEDIA"
+  | "WEBAUTHN";
+
+export const WEBAUTHN_CHALLENGE_MS = 5 * 60 * 1000;

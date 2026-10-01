@@ -1,6 +1,6 @@
 import { randomBytes, createHash, randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { getDb } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { isHttps } from "@/lib/http";
@@ -60,12 +60,23 @@ export async function createSession(request: NextRequest, userId: string) {
     );
   const jar = await cookies();
   jar.set(SESSION_COOKIE, token, sessionCookieOptions(request));
+  return token;
+}
+
+function bearerToken(authorization: string | null) {
+  if (!authorization) return null;
+  const match = /^Bearer\s+(\S+)$/i.exec(authorization);
+  return match?.[1] ?? null;
 }
 
 export async function clearSession(request: NextRequest) {
   const jar = await cookies();
-  const token = jar.get(SESSION_COOKIE)?.value;
-  if (token) {
+  const tokens = [
+    jar.get(SESSION_COOKIE)?.value,
+    bearerToken(request.headers.get("authorization")),
+  ];
+  for (const token of tokens) {
+    if (!token) continue;
     getDb().prepare("DELETE FROM sessions WHERE token_hash = ?").run(tokenHash(token));
   }
   jar.set(SESSION_COOKIE, "", {
@@ -74,10 +85,7 @@ export async function clearSession(request: NextRequest) {
   });
 }
 
-export async function getCurrentUser(): Promise<PublicUser | null> {
-  const jar = await cookies();
-  const token = jar.get(SESSION_COOKIE)?.value;
-  if (!token) return null;
+function userFromToken(token: string): PublicUser | null {
   purgeExpiredSessions();
   const row = getDb()
     .prepare(
@@ -91,6 +99,24 @@ export async function getCurrentUser(): Promise<PublicUser | null> {
     | undefined;
   if (!row) return null;
   return toPublicUser(row);
+}
+
+export async function getCurrentUser(): Promise<PublicUser | null> {
+  const headerStore = await headers();
+  const authorization = headerStore.get("authorization");
+  if (authorization) {
+    const token = bearerToken(authorization);
+    if (!token) return null;
+    return userFromToken(token);
+  }
+  const jar = await cookies();
+  const token = jar.get(SESSION_COOKIE)?.value;
+  if (!token) return null;
+  return userFromToken(token);
+}
+
+export function nativeClientRequested(value: unknown) {
+  return value === "native";
 }
 
 export async function registerUser(email: string, password: string) {
