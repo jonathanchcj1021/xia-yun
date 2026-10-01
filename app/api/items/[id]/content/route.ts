@@ -13,7 +13,7 @@ export async function GET(request: NextRequest, context: Context) {
   if (!user) return jsonError(401, "UNAUTHENTICATED", "尚未登入");
   const { id } = await context.params;
   if (!isUuid(id)) return jsonError(404, "NOT_FOUND", "找不到這個項目");
-  const item = getItem(user.id, id);
+  const item = await getItem(user.id, id);
   if (!item) return jsonError(404, "NOT_FOUND", "找不到這個項目");
 
   const forceAttachment =

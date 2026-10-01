@@ -12,7 +12,7 @@ import type {
   RegistrationResponseJSON,
 } from "@simplewebauthn/server";
 import { WEBAUTHN_CHALLENGE_MS } from "@/lib/constants";
-import { getDb } from "@/lib/db";
+import { execute, queryAll, queryOne } from "@/lib/db";
 import { isHttps } from "@/lib/http";
 
 type ChallengePurpose = "register" | "login";
@@ -46,83 +46,74 @@ export function webAuthnContext(request: NextRequest) {
   return { rpID, rpName: "匣雲", origin };
 }
 
-function saveChallenge(input: {
+async function saveChallenge(input: {
   userId?: string | null;
   email?: string | null;
   purpose: ChallengePurpose;
   challenge: string;
 }) {
   const now = Date.now();
-  getDb()
-    .prepare(
-      `DELETE FROM webauthn_challenges
-       WHERE purpose = ?
-         AND (
-           (? IS NOT NULL AND user_id = ?)
-           OR (? IS NOT NULL AND email = ?)
-           OR expires_at <= ?
-         )`,
-    )
-    .run(
-      input.purpose,
-      input.userId ?? null,
-      input.userId ?? null,
-      input.email ?? null,
-      input.email ?? null,
-      now,
-    );
-  getDb()
-    .prepare(
-      `INSERT INTO webauthn_challenges
-        (id, user_id, email, purpose, challenge, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      randomUUID(),
-      input.userId ?? null,
-      input.email ?? null,
-      input.purpose,
-      input.challenge,
-      now + WEBAUTHN_CHALLENGE_MS,
-    );
+  await execute(
+    `DELETE FROM webauthn_challenges
+     WHERE purpose = ?
+       AND (
+         (? IS NOT NULL AND user_id = ?)
+         OR (? IS NOT NULL AND email = ?)
+         OR expires_at <= ?
+       )`,
+    input.purpose,
+    input.userId ?? null,
+    input.userId ?? null,
+    input.email ?? null,
+    input.email ?? null,
+    now,
+  );
+  await execute(
+    `INSERT INTO webauthn_challenges
+      (id, user_id, email, purpose, challenge, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    randomUUID(),
+    input.userId ?? null,
+    input.email ?? null,
+    input.purpose,
+    input.challenge,
+    now + WEBAUTHN_CHALLENGE_MS,
+  );
 }
 
-function takeChallenge(input: {
+async function takeChallenge(input: {
   userId?: string | null;
   email?: string | null;
   purpose: ChallengePurpose;
 }) {
   const now = Date.now();
-  const row = getDb()
-    .prepare(
-      `SELECT id, challenge FROM webauthn_challenges
-       WHERE purpose = ?
-         AND (? IS NULL OR user_id = ?)
-         AND (? IS NULL OR email = ?)
-         AND expires_at > ?
-       ORDER BY expires_at DESC
-       LIMIT 1`,
-    )
-    .get(
-      input.purpose,
-      input.userId ?? null,
-      input.userId ?? null,
-      input.email ?? null,
-      input.email ?? null,
-      now,
-    ) as { id: string; challenge: string } | undefined;
+  const row = await queryOne<{ id: string; challenge: string }>(
+    `SELECT id, challenge FROM webauthn_challenges
+     WHERE purpose = ?
+       AND (? IS NULL OR user_id = ?)
+       AND (? IS NULL OR email = ?)
+       AND expires_at > ?
+     ORDER BY expires_at DESC
+     LIMIT 1`,
+    input.purpose,
+    input.userId ?? null,
+    input.userId ?? null,
+    input.email ?? null,
+    input.email ?? null,
+    now,
+  );
   if (!row) return null;
-  getDb().prepare("DELETE FROM webauthn_challenges WHERE id = ?").run(row.id);
+  await execute("DELETE FROM webauthn_challenges WHERE id = ?", row.id);
   return row.challenge;
 }
 
-function listPasskeys(userId: string, rpID: string) {
-  return getDb()
-    .prepare(
-      `SELECT credential_id, user_id, public_key, counter, transports, device_type, backed_up, rp_id
-       FROM passkeys WHERE user_id = ? AND rp_id = ?`,
-    )
-    .all(userId, rpID) as unknown as PasskeyRow[];
+async function listPasskeys(userId: string, rpID: string) {
+  return queryAll<PasskeyRow>(
+    `SELECT credential_id, user_id, public_key, counter, transports, device_type, backed_up, rp_id
+     FROM passkeys WHERE user_id = ? AND rp_id = ?`,
+    userId,
+    rpID,
+  );
 }
 
 function parseTransports(value: string | null) {
@@ -147,7 +138,7 @@ function toCredential(row: PasskeyRow) {
 
 export async function registrationOptions(request: NextRequest, user: { id: string; email: string }) {
   const { rpID, rpName } = webAuthnContext(request);
-  const existing = listPasskeys(user.id, rpID);
+  const existing = await listPasskeys(user.id, rpID);
   const options = await generateRegistrationOptions({
     rpName,
     rpID,
@@ -164,7 +155,7 @@ export async function registrationOptions(request: NextRequest, user: { id: stri
       userVerification: "preferred",
     },
   });
-  saveChallenge({
+  await saveChallenge({
     userId: user.id,
     purpose: "register",
     challenge: options.challenge,
@@ -177,7 +168,7 @@ export async function verifyRegistration(
   userId: string,
   response: RegistrationResponseJSON,
 ) {
-  const expectedChallenge = takeChallenge({ userId, purpose: "register" });
+  const expectedChallenge = await takeChallenge({ userId, purpose: "register" });
   if (!expectedChallenge) return { error: "通行密鑰挑戰已過期，請再試一次" as const };
   const { rpID, origin } = webAuthnContext(request);
   let verified: Awaited<ReturnType<typeof verifyRegistrationResponse>>;
@@ -193,32 +184,27 @@ export async function verifyRegistration(
   }
   if (!verified.verified) return { error: "通行密鑰驗證失敗" as const };
   const credential = verified.registrationInfo.credential;
-  getDb()
-    .prepare(
-      `INSERT INTO passkeys
-        (credential_id, user_id, public_key, counter, transports, device_type, backed_up, created_at, rp_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      credential.id,
-      userId,
-      isoBase64URL.fromBuffer(credential.publicKey),
-      credential.counter,
-      credential.transports ? JSON.stringify(credential.transports) : null,
-      verified.registrationInfo.credentialDeviceType,
-      verified.registrationInfo.credentialBackedUp ? 1 : 0,
-      Date.now(),
-      rpID,
-    );
+  await execute(
+    `INSERT INTO passkeys
+      (credential_id, user_id, public_key, counter, transports, device_type, backed_up, created_at, rp_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    credential.id,
+    userId,
+    isoBase64URL.fromBuffer(credential.publicKey),
+    credential.counter,
+    credential.transports ? JSON.stringify(credential.transports) : null,
+    verified.registrationInfo.credentialDeviceType,
+    verified.registrationInfo.credentialBackedUp ? 1 : 0,
+    Date.now(),
+    rpID,
+  );
   return { ok: true as const };
 }
 
 export async function loginOptions(request: NextRequest, email: string) {
-  const user = getDb()
-    .prepare("SELECT id FROM users WHERE email = ?")
-    .get(email) as { id: string } | undefined;
+  const user = await queryOne<{ id: string }>("SELECT id FROM users WHERE email = ?", email);
   const { rpID } = webAuthnContext(request);
-  const passkeys = user ? listPasskeys(user.id, rpID) : [];
+  const passkeys = user ? await listPasskeys(user.id, rpID) : [];
   if (!user || passkeys.length === 0) {
     return { error: NO_PASSKEY_ON_THIS_SITE };
   }
@@ -230,7 +216,7 @@ export async function loginOptions(request: NextRequest, email: string) {
     })),
     userVerification: "preferred",
   });
-  saveChallenge({ email, purpose: "login", challenge: options.challenge });
+  await saveChallenge({ email, purpose: "login", challenge: options.challenge });
   return { options };
 }
 
@@ -239,14 +225,15 @@ export async function verifyLogin(
   email: string,
   response: AuthenticationResponseJSON,
 ) {
-  const expectedChallenge = takeChallenge({ email, purpose: "login" });
+  const expectedChallenge = await takeChallenge({ email, purpose: "login" });
   if (!expectedChallenge) return { error: "通行密鑰挑戰已過期，請再試一次" as const };
-  const user = getDb()
-    .prepare("SELECT id, email, created_at FROM users WHERE email = ?")
-    .get(email) as { id: string; email: string; created_at: number } | undefined;
+  const user = await queryOne<{ id: string; email: string; created_at: number }>(
+    "SELECT id, email, created_at FROM users WHERE email = ?",
+    email,
+  );
   if (!user) return { error: "通行密鑰驗證失敗" as const };
   const { rpID, origin } = webAuthnContext(request);
-  const row = listPasskeys(user.id, rpID).find((item) => item.credential_id === response.id);
+  const row = (await listPasskeys(user.id, rpID)).find((item) => item.credential_id === response.id);
   if (!row) return { error: NO_PASSKEY_ON_THIS_SITE };
   let verified: Awaited<ReturnType<typeof verifyAuthenticationResponse>>;
   try {
@@ -261,9 +248,12 @@ export async function verifyLogin(
     return { error: "通行密鑰驗證失敗" as const };
   }
   if (!verified.verified) return { error: "通行密鑰驗證失敗" as const };
-  getDb()
-    .prepare("UPDATE passkeys SET counter = ? WHERE credential_id = ? AND user_id = ?")
-    .run(verified.authenticationInfo.newCounter, row.credential_id, user.id);
+  await execute(
+    "UPDATE passkeys SET counter = ? WHERE credential_id = ? AND user_id = ?",
+    verified.authenticationInfo.newCounter,
+    row.credential_id,
+    user.id,
+  );
   return {
     user: {
       id: user.id,

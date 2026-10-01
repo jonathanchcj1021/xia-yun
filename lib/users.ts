@@ -1,7 +1,7 @@
 import { randomBytes, createHash, randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { cookies, headers } from "next/headers";
-import { getDb } from "@/lib/db";
+import { execute, queryOne } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { isHttps } from "@/lib/http";
 import { SESSION_COOKIE, SESSION_MAX_AGE_SECONDS } from "@/lib/constants";
@@ -38,26 +38,21 @@ export function sessionCookieOptions(request: NextRequest) {
   };
 }
 
-function purgeExpiredSessions() {
-  getDb()
-    .prepare("DELETE FROM sessions WHERE expires_at <= ?")
-    .run(Date.now());
+async function purgeExpiredSessions() {
+  await execute("DELETE FROM sessions WHERE expires_at <= ?", Date.now());
 }
 
 export async function createSession(request: NextRequest, userId: string) {
   const token = randomBytes(32).toString("base64url");
   const now = Date.now();
-  getDb()
-    .prepare(
-      `INSERT INTO sessions (token_hash, user_id, expires_at, created_at)
-       VALUES (?, ?, ?, ?)`,
-    )
-    .run(
-      tokenHash(token),
-      userId,
-      now + SESSION_MAX_AGE_SECONDS * 1000,
-      now,
-    );
+  await execute(
+    `INSERT INTO sessions (token_hash, user_id, expires_at, created_at)
+     VALUES (?, ?, ?, ?)`,
+    tokenHash(token),
+    userId,
+    now + SESSION_MAX_AGE_SECONDS * 1000,
+    now,
+  );
   const jar = await cookies();
   jar.set(SESSION_COOKIE, token, sessionCookieOptions(request));
   return token;
@@ -77,7 +72,7 @@ export async function clearSession(request: NextRequest) {
   ];
   for (const token of tokens) {
     if (!token) continue;
-    getDb().prepare("DELETE FROM sessions WHERE token_hash = ?").run(tokenHash(token));
+    await execute("DELETE FROM sessions WHERE token_hash = ?", tokenHash(token));
   }
   jar.set(SESSION_COOKIE, "", {
     ...sessionCookieOptions(request),
@@ -85,34 +80,37 @@ export async function clearSession(request: NextRequest) {
   });
 }
 
-function userFromToken(token: string): PublicUser | null {
-  purgeExpiredSessions();
-  const row = getDb()
-    .prepare(
-      `SELECT users.id AS id, users.email AS email, users.created_at AS created_at
-       FROM sessions
-       JOIN users ON users.id = sessions.user_id
-       WHERE sessions.token_hash = ? AND sessions.expires_at > ?`,
-    )
-    .get(tokenHash(token), Date.now()) as
-    | Pick<UserRow, "id" | "email" | "created_at">
-    | undefined;
+async function userFromToken(token: string): Promise<PublicUser | null> {
+  await purgeExpiredSessions();
+  const row = await queryOne<Pick<UserRow, "id" | "email" | "created_at">>(
+    `SELECT users.id AS id, users.email AS email, users.created_at AS created_at
+     FROM sessions
+     JOIN users ON users.id = sessions.user_id
+     WHERE sessions.token_hash = ? AND sessions.expires_at > ?`,
+    tokenHash(token),
+    Date.now(),
+  );
   if (!row) return null;
   return toPublicUser(row);
 }
 
 export async function getCurrentUser(): Promise<PublicUser | null> {
-  const headerStore = await headers();
-  const authorization = headerStore.get("authorization");
-  if (authorization) {
-    const token = bearerToken(authorization);
+  try {
+    const headerStore = await headers();
+    const authorization = headerStore.get("authorization");
+    if (authorization) {
+      const token = bearerToken(authorization);
+      if (!token) return null;
+      return userFromToken(token);
+    }
+    const jar = await cookies();
+    const token = jar.get(SESSION_COOKIE)?.value;
     if (!token) return null;
     return userFromToken(token);
+  } catch (error) {
+    if (process.env.NEXT_PHASE === "phase-production-build") return null;
+    throw error;
   }
-  const jar = await cookies();
-  const token = jar.get(SESSION_COOKIE)?.value;
-  if (!token) return null;
-  return userFromToken(token);
 }
 
 export function nativeClientRequested(value: unknown) {
@@ -124,14 +122,17 @@ export async function registerUser(email: string, password: string) {
   const now = Date.now();
   const passwordHash = await hashPassword(password);
   try {
-    getDb()
-      .prepare(
-        `INSERT INTO users (id, email, password_hash, created_at)
-         VALUES (?, ?, ?, ?)`,
-      )
-      .run(id, email, passwordHash, now);
+    await execute(
+      `INSERT INTO users (id, email, password_hash, created_at)
+       VALUES (?, ?, ?, ?)`,
+      id,
+      email,
+      passwordHash,
+      now,
+    );
   } catch (error) {
-    if (error instanceof Error && error.message.includes("UNIQUE")) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("UNIQUE")) {
       return { taken: true as const };
     }
     throw error;
@@ -149,11 +150,10 @@ function dummyHash() {
 }
 
 export async function authenticate(email: string, password: string) {
-  const row = getDb()
-    .prepare(
-      `SELECT id, email, password_hash, created_at FROM users WHERE email = ?`,
-    )
-    .get(email) as UserRow | undefined;
+  const row = await queryOne<UserRow>(
+    `SELECT id, email, password_hash, created_at FROM users WHERE email = ?`,
+    email,
+  );
   const passwordHash = row?.password_hash ?? (await dummyHash());
   const matches = await verifyPassword(password, passwordHash);
   if (!row || !matches) return null;
