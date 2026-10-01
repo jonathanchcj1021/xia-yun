@@ -50,7 +50,7 @@ jobs:
         run: npm ci
 
       - name: 建置 OpenNext Worker
-        run: npx opennextjs-cloudflare build
+        run: npm exec -- opennextjs-cloudflare build
 
       - name: 部署到 Cloudflare Worker (Preview)
         uses: cloudflare/wrangler-action@v3
@@ -78,7 +78,7 @@ jobs:
         run: npm ci
 
       - name: 建置 OpenNext Worker
-        run: npx opennextjs-cloudflare build
+        run: npm exec -- opennextjs-cloudflare build
 
       - name: 部署到 Cloudflare Worker (Production)
         uses: cloudflare/wrangler-action@v3
