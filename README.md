@@ -48,6 +48,7 @@ npm run dev
 | GET | `/api/items/[id]` | 單筆中繼資料。筆記含 `body`。含 `group` 與 `tags`。 |
 | PATCH | `/api/items/[id]` | JSON `{ "group"?, "tags"? }`。省略的欄位不變。`group` 為 `null` 或 `""` 表示未分組。`tags` 會整份取代。只限擁有者；未登入 `401`。 |
 | GET | `/api/items/[id]/content` | 下載或內嵌圖片。`?disposition=attachment` 強制下載。 |
+| DELETE | `/api/items` | JSON `{ "group": string \| null }`。`null` 或 `""` 刪除這個帳號的未分組項目；其他字串只刪該分組。檔案與圖片的內容一併刪除。回 `{ "deleted": number }`。未登入 `401`。 |
 | DELETE | `/api/items/[id]` | 刪除自己的項目與檔案內容。 |
 
 上傳欄位：`file`（必填）、`name`（選填，顯示名稱）、`type`（選填，`file` 或 `image`）。未指定類型時，可預覽的點陣圖（JPEG、PNG、GIF、WebP、AVIF、BMP）會存成 `image`，其餘（含 SVG）存成 `file`。

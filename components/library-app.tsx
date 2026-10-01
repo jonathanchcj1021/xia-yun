@@ -116,6 +116,11 @@ export function LibraryApp({ user }: { user: PublicUser }) {
   const [noteBody, setNoteBody] = useState("");
   const [savingNote, setSavingNote] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Item | null>(null);
+  const [pendingGroup, setPendingGroup] = useState<{
+    key: string;
+    label: string;
+    count: number;
+  } | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [preview, setPreview] = useState<Item | null>(null);
   const [previewFailed, setPreviewFailed] = useState(false);
@@ -318,6 +323,38 @@ export function LibraryApp({ user }: { user: PublicUser }) {
       await loadItems();
     } catch {
       setActionError("刪除時無法連線");
+      setDeleting(false);
+    }
+  }
+
+  async function confirmGroupDelete() {
+    if (!pendingGroup) return;
+    setDeleting(true);
+    setActionError(null);
+    try {
+      const response = await fetch("/api/items", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          group: pendingGroup.key === UNGROUPED ? null : pendingGroup.label,
+        }),
+      });
+      if (response.status === 401) {
+        goToLogin();
+        return;
+      }
+      if (!response.ok) {
+        setActionError(await errorMessage(response));
+        setDeleting(false);
+        return;
+      }
+      setPendingGroup(null);
+      setPreview(null);
+      setReading(null);
+      setDeleting(false);
+      await loadItems();
+    } catch {
+      setActionError("刪除分組時無法連線");
       setDeleting(false);
     }
   }
@@ -624,20 +661,35 @@ export function LibraryApp({ user }: { user: PublicUser }) {
               const open = !collapsed[section.key];
               return (
                 <section key={section.key} className="flex flex-col gap-2">
-                  <button
-                    type="button"
-                    className="flex items-center gap-2 text-left"
-                    aria-expanded={open}
-                    onClick={() =>
-                      setCollapsed((current) => ({ ...current, [section.key]: open }))
-                    }
-                  >
-                    <ChevronDown
-                      className={`size-4 text-muted-foreground transition-transform ${open ? "" : "-rotate-90"}`}
-                    />
-                    <span className="text-sm font-medium">{section.label}</span>
-                    <span className="text-sm text-muted-foreground">{section.items.length}</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                      aria-expanded={open}
+                      onClick={() =>
+                        setCollapsed((current) => ({ ...current, [section.key]: open }))
+                      }
+                    >
+                      <ChevronDown
+                        className={`size-4 shrink-0 text-muted-foreground transition-transform ${open ? "" : "-rotate-90"}`}
+                      />
+                      <span className="truncate text-sm font-medium">{section.label}</span>
+                      <span className="text-sm text-muted-foreground">{section.items.length}</span>
+                    </button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 shrink-0 text-destructive"
+                      onClick={() => {
+                        const count = (items ?? []).filter((item) =>
+                          section.key === UNGROUPED ? !item.group : item.group === section.label,
+                        ).length;
+                        setPendingGroup({ key: section.key, label: section.label, count });
+                      }}
+                    >
+                      刪除分組
+                    </Button>
+                  </div>
                   {open ? (
                     <ul className="flex flex-col gap-2">
                       {section.items.map((item) => (
@@ -808,6 +860,27 @@ export function LibraryApp({ user }: { user: PublicUser }) {
             </Button>
             <Button onClick={() => void saveNote()} disabled={savingNote}>
               {savingNote ? "儲存中…" : "儲存筆記"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(pendingGroup)} onOpenChange={(open) => !open && setPendingGroup(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {pendingGroup?.key === UNGROUPED
+                ? `刪除未分組入面全部 ${pendingGroup.count} 個項目？`
+                : `刪除「${pendingGroup?.label}」入面全部 ${pendingGroup?.count} 個項目？`}
+            </DialogTitle>
+            <DialogDescription>這些項目會從你的帳號移除，無法復原。</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingGroup(null)} disabled={deleting}>
+              取消
+            </Button>
+            <Button variant="destructive" onClick={() => void confirmGroupDelete()} disabled={deleting}>
+              {deleting ? "刪除中…" : "刪除分組"}
             </Button>
           </DialogFooter>
         </DialogContent>

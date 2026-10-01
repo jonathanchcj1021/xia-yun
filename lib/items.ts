@@ -176,6 +176,40 @@ export function updateItemMeta(userId: string, itemId: string, patch: ItemMeta) 
   return getItem(userId, itemId);
 }
 
+export async function deleteGroup(userId: string, group: string | null) {
+  const rows = (
+    group == null
+      ? getDb()
+          .prepare(
+            `SELECT id, type FROM items
+             WHERE user_id = ? AND (item_group IS NULL OR item_group = '')`,
+          )
+          .all(userId)
+      : getDb()
+          .prepare(
+            `SELECT id, type FROM items
+             WHERE user_id = ? AND item_group = ?`,
+          )
+          .all(userId, group)
+  ) as unknown as { id: string; type: ItemType }[];
+  const result =
+    group == null
+      ? getDb()
+          .prepare(
+            `DELETE FROM items
+             WHERE user_id = ? AND (item_group IS NULL OR item_group = '')`,
+          )
+          .run(userId)
+      : getDb()
+          .prepare("DELETE FROM items WHERE user_id = ? AND item_group = ?")
+          .run(userId, group);
+  for (const row of rows) {
+    if (row.type === "text") continue;
+    await fs.rm(blobPath(userId, row.id), { force: true });
+  }
+  return Number(result.changes);
+}
+
 export async function deleteItem(userId: string, itemId: string) {
   const existing = getItem(userId, itemId);
   if (!existing) return false;

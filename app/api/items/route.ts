@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { MAX_REQUEST_BYTES, MAX_UPLOAD_BYTES } from "@/lib/constants";
 import { jsonError, jsonOk, isRecord, readJson } from "@/lib/http";
-import { createBlobItem, createTextItem, listItems } from "@/lib/items";
+import { createBlobItem, createTextItem, deleteGroup, listItems } from "@/lib/items";
 import { getCurrentUser } from "@/lib/users";
 import {
   isRasterMime,
@@ -19,6 +19,19 @@ export async function GET() {
   const user = await getCurrentUser();
   if (!user) return jsonError(401, "UNAUTHENTICATED", "尚未登入");
   return jsonOk({ items: listItems(user.id) });
+}
+
+export async function DELETE(request: NextRequest) {
+  const user = await getCurrentUser();
+  if (!user) return jsonError(401, "UNAUTHENTICATED", "尚未登入");
+  const parsed = await readJson(request);
+  if ("invalid" in parsed || !isRecord(parsed.value) || !("group" in parsed.value)) {
+    return jsonError(400, "VALIDATION", "請提供要刪除的分組");
+  }
+  const group = normalizeGroup(parsed.value.group);
+  if ("error" in group) return jsonError(400, "VALIDATION", group.error ?? "分組格式不正確");
+  const deleted = await deleteGroup(user.id, group.group);
+  return jsonOk({ deleted });
 }
 
 export async function POST(request: NextRequest) {
