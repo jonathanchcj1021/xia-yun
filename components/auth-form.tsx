@@ -78,7 +78,12 @@ export function AuthForm({ mode }: { mode: Mode }) {
             ? "用這個電子郵件在手機與電腦瀏覽器登入。密碼至少 8 個字元。"
             : "輸入註冊時的電子郵件與密碼。登入狀態會留在這台裝置。"}
         </p>
-        <form onSubmit={onSubmit} className="mt-8 flex flex-col gap-4" noValidate>
+        <form
+          method="post"
+          onSubmit={onSubmit}
+          className="mt-8 flex flex-col gap-4"
+          noValidate
+        >
           <div className="flex flex-col gap-2">
             <Label htmlFor="email">電子郵件</Label>
             <Input
