@@ -25,7 +25,7 @@ fun LockScreen(
 ) {
     LaunchedEffect(Unit) { onUnlock() }
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier.fillMaxSize().safeScreenPadding().padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

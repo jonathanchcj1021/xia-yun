@@ -48,7 +48,14 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.material3.Scaffold
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -159,6 +166,9 @@ fun LibraryScreen(
         )
     } else {
         Scaffold(
+            contentWindowInsets = WindowInsets.systemBars
+                .union(WindowInsets.navigationBars)
+                .union(WindowInsets.ime),
             topBar = {
                 TopAppBar(
                     title = {
@@ -212,7 +222,10 @@ fun LibraryScreen(
             },
             bottomBar = {
                 Surface(tonalElevation = 2.dp) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(
+                        Modifier.aboveSystemBars().padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
                         if (state.uploading || state.savingNote) {
                             LinearProgressIndicator(Modifier.fillMaxWidth())
                             Text(
@@ -309,48 +322,72 @@ fun LibraryScreen(
     }
 
     if (noteOpen) {
-        AlertDialog(
+        Dialog(
             onDismissRequest = { if (!state.savingNote) noteOpen = false },
-            title = { Text("新增筆記") },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = noteTitle,
-                        onValueChange = { noteTitle = it },
-                        label = { Text("標題") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = noteBody,
-                        onValueChange = { noteBody = it },
-                        label = { Text("內文") },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
-                    )
-                    if (noteError != null) {
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false,
+            ),
+        ) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .safeScreenPadding()
+                    .padding(20.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Surface(shape = RoundedCornerShape(24.dp), tonalElevation = 2.dp) {
+                    Column(
+                        Modifier
+                            .widthIn(max = 480.dp)
+                            .verticalScroll(rememberScrollState())
+                            .padding(20.dp),
+                    ) {
+                        Text("新增筆記", style = MaterialTheme.typography.titleLarge)
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = noteTitle,
+                            onValueChange = { noteTitle = it },
+                            label = { Text("標題") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                         Spacer(Modifier.height(8.dp))
-                        Text(noteError!!, color = MaterialTheme.colorScheme.error)
+                        OutlinedTextField(
+                            value = noteBody,
+                            onValueChange = { noteBody = it },
+                            label = { Text("內文") },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                        )
+                        if (noteError != null) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(noteError!!, color = MaterialTheme.colorScheme.error)
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            TextButton(
+                                onClick = { noteOpen = false },
+                                enabled = !state.savingNote,
+                            ) { Text("取消") }
+                            TextButton(
+                                onClick = {
+                                    if (noteTitle.isBlank()) {
+                                        noteError = "請填寫筆記標題"
+                                    } else {
+                                        noteOpen = false
+                                        onCreateNote(noteTitle, noteBody)
+                                    }
+                                },
+                                enabled = !state.savingNote,
+                            ) { Text("儲存") }
+                        }
                     }
                 }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (noteTitle.isBlank()) {
-                            noteError = "請填寫筆記標題"
-                        } else {
-                            noteOpen = false
-                            onCreateNote(noteTitle, noteBody)
-                        }
-                    },
-                    enabled = !state.savingNote,
-                ) { Text("儲存") }
-            },
-            dismissButton = {
-                TextButton(onClick = { noteOpen = false }, enabled = !state.savingNote) { Text("取消") }
-            },
-        )
+            }
+        }
     }
 
     val pending = state.pendingDelete
@@ -458,6 +495,9 @@ private fun DetailScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets.systemBars
+            .union(WindowInsets.navigationBars)
+            .union(WindowInsets.ime),
         topBar = {
             TopAppBar(
                 title = { Text(item.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -515,7 +555,10 @@ private fun DetailScreen(
                 }
             }
             Spacer(Modifier.height(20.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                Modifier.aboveSystemBars(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 Button(onClick = {
                     val name = if (item.type == "text" && !item.name.endsWith(".txt", ignoreCase = true)) {
                         "${item.name}.txt"
