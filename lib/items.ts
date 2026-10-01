@@ -14,6 +14,8 @@ export type ItemRecord = {
   createdAt: string;
   excerpt: string | null;
   body: string | null;
+  group: string | null;
+  tags: string[];
 };
 
 type ItemRow = {
@@ -25,6 +27,13 @@ type ItemRow = {
   mime_type: string | null;
   body: string | null;
   created_at: number;
+  item_group: string | null;
+  tags: string | null;
+};
+
+export type ItemMeta = {
+  group?: string | null;
+  tags?: string[];
 };
 
 function excerptOf(body: string | null) {
@@ -32,6 +41,17 @@ function excerptOf(body: string | null) {
   const compact = body.replace(/\s+/g, " ").trim();
   if (!compact) return null;
   return compact.length > 120 ? `${compact.slice(0, 120)}…` : compact;
+}
+
+function parseTags(value: string | null) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is string => typeof item === "string");
+  } catch {
+    return [];
+  }
 }
 
 function toItem(row: ItemRow, includeBody: boolean): ItemRecord {
@@ -45,10 +65,12 @@ function toItem(row: ItemRow, includeBody: boolean): ItemRecord {
     createdAt: new Date(Number(row.created_at)).toISOString(),
     excerpt: row.type === "text" ? excerptOf(row.body) : null,
     body: includeBody && row.type === "text" ? (row.body ?? "") : null,
+    group: row.item_group?.trim() ? row.item_group : null,
+    tags: parseTags(row.tags),
   };
 }
 
-const itemColumns = `id, user_id, type, name, size, mime_type, body, created_at`;
+const itemColumns = `id, user_id, type, name, size, mime_type, body, created_at, item_group, tags`;
 
 export function listItems(userId: string) {
   const rows = getDb()
@@ -75,6 +97,7 @@ export async function createTextItem(
   userId: string,
   title: string,
   body: string,
+  meta: ItemMeta = {},
 ) {
   const id = randomUUID();
   const now = Date.now();
@@ -82,10 +105,19 @@ export async function createTextItem(
   getDb()
     .prepare(
       `INSERT INTO items
-        (id, user_id, type, name, size, mime_type, body, created_at)
-       VALUES (?, ?, 'text', ?, ?, 'text/plain; charset=utf-8', ?, ?)`,
+        (id, user_id, type, name, size, mime_type, body, created_at, item_group, tags)
+       VALUES (?, ?, 'text', ?, ?, 'text/plain; charset=utf-8', ?, ?, ?, ?)`,
     )
-    .run(id, userId, title, size, body, now);
+    .run(
+      id,
+      userId,
+      title,
+      size,
+      body,
+      now,
+      meta.group ?? null,
+      JSON.stringify(meta.tags ?? []),
+    );
   return getItem(userId, id)!;
 }
 
@@ -95,6 +127,8 @@ export async function createBlobItem(input: {
   name: string;
   mimeType: string;
   bytes: Buffer;
+  group?: string | null;
+  tags?: string[];
 }) {
   const id = randomUUID();
   const now = Date.now();
@@ -105,8 +139,8 @@ export async function createBlobItem(input: {
     getDb()
       .prepare(
         `INSERT INTO items
-          (id, user_id, type, name, size, mime_type, body, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, NULL, ?)`,
+          (id, user_id, type, name, size, mime_type, body, created_at, item_group, tags)
+         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
       )
       .run(
         id,
@@ -116,12 +150,30 @@ export async function createBlobItem(input: {
         input.bytes.length,
         input.mimeType,
         now,
+        input.group ?? null,
+        JSON.stringify(input.tags ?? []),
       );
   } catch (error) {
     await fs.rm(destination, { force: true });
     throw error;
   }
   return getItem(input.userId, id)!;
+}
+
+export function updateItemMeta(userId: string, itemId: string, patch: ItemMeta) {
+  const existing = getItem(userId, itemId);
+  if (!existing) return null;
+  if (patch.group !== undefined) {
+    getDb()
+      .prepare("UPDATE items SET item_group = ? WHERE id = ? AND user_id = ?")
+      .run(patch.group, itemId, userId);
+  }
+  if (patch.tags !== undefined) {
+    getDb()
+      .prepare("UPDATE items SET tags = ? WHERE id = ? AND user_id = ?")
+      .run(JSON.stringify(patch.tags), itemId, userId);
+  }
+  return getItem(userId, itemId);
 }
 
 export async function deleteItem(userId: string, itemId: string) {

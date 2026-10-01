@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { startRegistration } from "@simplewebauthn/browser";
 import {
+  ChevronDown,
   Download,
   FileText,
   Fingerprint,
@@ -49,7 +50,14 @@ type Item = {
   createdAt: string;
   excerpt: string | null;
   body: string | null;
+  group: string | null;
+  tags: string[];
 };
+
+type SortMode = "newest" | "oldest" | "name";
+type TypeFilter = "all" | ItemType;
+
+const UNGROUPED = "未分組";
 
 const typeLabel: Record<ItemType, string> = {
   file: "檔案",
@@ -71,6 +79,17 @@ function formatSize(bytes: number) {
     return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} KB`;
   }
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function compareItems(sortMode: SortMode, left: Item, right: Item) {
+  if (sortMode === "name") return left.name.localeCompare(right.name, "zh-Hant");
+  const delta = new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+  return sortMode === "oldest" ? delta : -delta;
+}
+
+function sectionMoment(sortMode: SortMode, list: Item[]) {
+  const times = list.map((item) => new Date(item.createdAt).getTime());
+  return sortMode === "oldest" ? Math.min(...times) : Math.max(...times);
 }
 
 async function errorMessage(response: Response) {
@@ -104,6 +123,16 @@ export function LibraryApp({ user }: { user: PublicUser }) {
   const [readingState, setReadingState] = useState<"loading" | "ready" | "error">(
     "ready",
   );
+  const [query, setQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [sortMode, setSortMode] = useState<SortMode>("newest");
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [tagTarget, setTagTarget] = useState<Item | null>(null);
+  const [tagDraft, setTagDraft] = useState("");
+  const [groupTarget, setGroupTarget] = useState<Item | null>(null);
+  const [groupDraft, setGroupDraft] = useState("");
+  const [savingMeta, setSavingMeta] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
@@ -126,7 +155,13 @@ export function LibraryApp({ user }: { user: PublicUser }) {
         return;
       }
       const data = (await response.json()) as { items: Item[] };
-      setItems(data.items);
+      setItems(
+        data.items.map((item) => ({
+          ...item,
+          group: item.group ?? null,
+          tags: item.tags ?? [],
+        })),
+      );
     } catch {
       setListError("無法連線，請稍後再試");
       setItems([]);
@@ -297,12 +332,104 @@ export function LibraryApp({ user }: { user: PublicUser }) {
         return;
       }
       const data = (await response.json()) as { item: Item };
-      setReading(data.item);
+      setReading({ ...data.item, group: data.item.group ?? null, tags: data.item.tags ?? [] });
       setReadingState("ready");
     } catch {
       setReadingState("error");
     }
   }
+
+  async function patchItem(item: Item, body: { group?: string | null; tags?: string[] }) {
+    setSavingMeta(true);
+    setActionError(null);
+    try {
+      const response = await fetch(`/api/items/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (response.status === 401) {
+        goToLogin();
+        return false;
+      }
+      if (!response.ok) {
+        setActionError(await errorMessage(response));
+        return false;
+      }
+      const data = (await response.json()) as { item: Item };
+      setItems(
+        (current) =>
+          current?.map((entry) =>
+            entry.id === item.id
+              ? {
+                  ...entry,
+                  group: data.item.group ?? null,
+                  tags: data.item.tags ?? [],
+                }
+              : entry,
+          ) ?? null,
+      );
+      return true;
+    } catch {
+      setActionError("無法更新這個項目");
+      return false;
+    } finally {
+      setSavingMeta(false);
+    }
+  }
+
+  const knownGroups = useMemo(() => {
+    const names = new Set<string>();
+    for (const item of items ?? []) {
+      if (item.group) names.add(item.group);
+    }
+    return [...names].sort((left, right) => left.localeCompare(right, "zh-Hant"));
+  }, [items]);
+
+  const sections = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase();
+    const filtered = (items ?? []).filter((item) => {
+      if (typeFilter !== "all" && item.type !== typeFilter) return false;
+      if (
+        tagFilter &&
+        !item.tags.some((tag) => tag.toLocaleLowerCase() === tagFilter.toLocaleLowerCase())
+      ) {
+        return false;
+      }
+      if (!needle) return true;
+      const note = item.type === "text" ? (item.excerpt ?? "") : "";
+      return `${item.name} ${note}`.toLocaleLowerCase().includes(needle);
+    });
+    const grouped = new Map<string, Item[]>();
+    const loose: Item[] = [];
+    for (const item of filtered) {
+      if (item.group) {
+        const list = grouped.get(item.group) ?? [];
+        list.push(item);
+        grouped.set(item.group, list);
+      } else {
+        loose.push(item);
+      }
+    }
+    const named = [...grouped.entries()].map(([label, list]) => ({
+      key: label,
+      label,
+      items: [...list].sort((left, right) => compareItems(sortMode, left, right)),
+    }));
+    named.sort((left, right) => {
+      if (sortMode === "name") return left.label.localeCompare(right.label, "zh-Hant");
+      const delta = sectionMoment(sortMode, left.items) - sectionMoment(sortMode, right.items);
+      return sortMode === "oldest" ? delta : -delta;
+    });
+    if (loose.length > 0) {
+      named.push({
+        key: UNGROUPED,
+        label: UNGROUPED,
+        items: [...loose].sort((left, right) => compareItems(sortMode, left, right)),
+      });
+    }
+    return named;
+  }, [items, query, sortMode, tagFilter, typeFilter]);
 
   return (
     <div className="flex min-h-full flex-col">
@@ -343,7 +470,7 @@ export function LibraryApp({ user }: { user: PublicUser }) {
         ) : null}
       </header>
 
-      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-6 sm:py-8">
+      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-6 pb-28 sm:py-8">
         <div className="flex flex-col gap-4 lg:flex-row">
           <div
             className={`flex flex-1 flex-col items-start gap-3 rounded-2xl border border-dashed px-4 py-5 transition-colors sm:px-6 ${
@@ -389,7 +516,7 @@ export function LibraryApp({ user }: { user: PublicUser }) {
               選擇檔案
             </Button>
           </div>
-          <Card className="lg:w-72">
+          <Card className="hidden sm:block lg:w-72">
             <CardHeader>
               <CardTitle>寫一則筆記</CardTitle>
               <CardDescription>標題與內文會存在這個帳號，不會變成公開頁面。</CardDescription>
@@ -414,6 +541,49 @@ export function LibraryApp({ user }: { user: PublicUser }) {
           <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {actionError}
           </p>
+        ) : null}
+
+        {items && items.length > 0 ? (
+          <div className="flex flex-col gap-3">
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center">
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="搜尋名稱或筆記"
+                aria-label="搜尋名稱或筆記"
+                className="h-11 text-base md:text-sm"
+              />
+              <select
+                aria-label="類型"
+                value={typeFilter}
+                onChange={(event) => setTypeFilter(event.target.value as TypeFilter)}
+                className="h-11 rounded-lg border border-input bg-background px-3 text-sm"
+              >
+                <option value="all">全部</option>
+                <option value="file">檔案</option>
+                <option value="image">圖片</option>
+                <option value="text">筆記</option>
+              </select>
+              <select
+                aria-label="排序"
+                value={sortMode}
+                onChange={(event) => setSortMode(event.target.value as SortMode)}
+                className="h-11 rounded-lg border border-input bg-background px-3 text-sm"
+              >
+                <option value="newest">最新</option>
+                <option value="oldest">最舊</option>
+                <option value="name">名稱</option>
+              </select>
+            </div>
+            {tagFilter ? (
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span>標籤：{tagFilter}</span>
+                <Button variant="outline" size="sm" className="h-8" onClick={() => setTagFilter(null)}>
+                  清除
+                </Button>
+              </div>
+            ) : null}
+          </div>
         ) : null}
 
         {items === null ? (
@@ -441,93 +611,167 @@ export function LibraryApp({ user }: { user: PublicUser }) {
               上傳一個檔案，或寫下第一則筆記。內容只會出現在這個帳號。
             </p>
           </div>
+        ) : sections.length === 0 ? (
+          <div className="rounded-2xl border border-dashed px-6 py-16 text-center">
+            <h2 className="text-lg font-medium">沒有符合的項目</h2>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+              試著清掉搜尋、類型或標籤，項目還在這個帳號裡。
+            </p>
+          </div>
         ) : (
-          <ul className="grid gap-3 sm:grid-cols-2">
-            {items.map((item) => (
-              <li key={item.id}>
-                <article className="flex h-full flex-col overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
-                  {item.type === "image" ? (
-                    <button
-                      type="button"
-                      className="block w-full bg-muted"
-                      onClick={() => {
-                        setPreviewFailed(false);
-                        setPreview(item);
-                      }}
-                    >
-                      {/* User-owned bytes are served by our API, not the image optimizer. */}
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={`/api/items/${item.id}/content`}
-                        alt=""
-                        className="h-40 w-full object-cover"
-                      />
-                    </button>
+          <div className="flex flex-col gap-6">
+            {sections.map((section) => {
+              const open = !collapsed[section.key];
+              return (
+                <section key={section.key} className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 text-left"
+                    aria-expanded={open}
+                    onClick={() =>
+                      setCollapsed((current) => ({ ...current, [section.key]: open }))
+                    }
+                  >
+                    <ChevronDown
+                      className={`size-4 text-muted-foreground transition-transform ${open ? "" : "-rotate-90"}`}
+                    />
+                    <span className="text-sm font-medium">{section.label}</span>
+                    <span className="text-sm text-muted-foreground">{section.items.length}</span>
+                  </button>
+                  {open ? (
+                    <ul className="flex flex-col gap-2">
+                      {section.items.map((item) => (
+                        <li key={item.id}>
+                          <article className="rounded-xl bg-card p-3 ring-1 ring-foreground/10 sm:p-4">
+                            <div className="flex gap-3">
+                              {item.type === "image" ? (
+                                <button
+                                  type="button"
+                                  className="size-10 shrink-0 overflow-hidden rounded-lg bg-muted"
+                                  onClick={() => {
+                                    setPreviewFailed(false);
+                                    setPreview(item);
+                                  }}
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={`/api/items/${item.id}/content`}
+                                    alt=""
+                                    className="size-10 object-cover"
+                                  />
+                                </button>
+                              ) : (
+                                <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                                  {item.type === "text" ? (
+                                    <FileText className="size-4" />
+                                  ) : (
+                                    <Upload className="size-4" />
+                                  )}
+                                </span>
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-start justify-between gap-3">
+                                  <h2 className="truncate text-sm font-medium" title={item.name}>
+                                    {item.name}
+                                  </h2>
+                                  <Badge variant="secondary">{typeLabel[item.type]}</Badge>
+                                </div>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {typeLabel[item.type]} · {formatSize(item.size)} ·{" "}
+                                  {timeFormat.format(new Date(item.createdAt))}
+                                </p>
+                                {item.type === "text" ? (
+                                  <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground">
+                                    {item.excerpt ?? "（沒有內文）"}
+                                  </p>
+                                ) : null}
+                                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                  {item.tags.map((tag) => (
+                                    <button
+                                      key={tag}
+                                      type="button"
+                                      className="rounded-full bg-secondary px-2.5 py-1 text-xs text-secondary-foreground"
+                                      onClick={() => setTagFilter(tag)}
+                                    >
+                                      {tag}
+                                    </button>
+                                  ))}
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 border-dashed"
+                                    onClick={() => {
+                                      setTagDraft("");
+                                      setTagTarget(item);
+                                    }}
+                                  >
+                                    + 標籤
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7"
+                                    onClick={() => {
+                                      setGroupDraft(item.group ?? "");
+                                      setGroupTarget(item);
+                                    }}
+                                  >
+                                    移到分組
+                                  </Button>
+                                </div>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  {item.type === "image" ? (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-9"
+                                      onClick={() => {
+                                        setPreviewFailed(false);
+                                        setPreview(item);
+                                      }}
+                                    >
+                                      <ImageIcon />
+                                      預覽
+                                    </Button>
+                                  ) : null}
+                                  {item.type === "text" ? (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-9"
+                                      onClick={() => void openNote(item)}
+                                    >
+                                      <FileText />
+                                      查看
+                                    </Button>
+                                  ) : null}
+                                  <Button variant="outline" size="sm" className="h-9" asChild>
+                                    <a href={`/api/items/${item.id}/content?disposition=attachment`}>
+                                      <Download />
+                                      下載
+                                    </a>
+                                  </Button>
+                                  <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    className="h-9"
+                                    onClick={() => setPendingDelete(item)}
+                                  >
+                                    <Trash2 />
+                                    刪除
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          </article>
+                        </li>
+                      ))}
+                    </ul>
                   ) : null}
-                  <div className="flex flex-1 flex-col gap-3 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <h2 className="truncate text-sm font-medium" title={item.name}>
-                          {item.name}
-                        </h2>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {formatSize(item.size)} · {timeFormat.format(new Date(item.createdAt))}
-                        </p>
-                      </div>
-                      <Badge variant="secondary">{typeLabel[item.type]}</Badge>
-                    </div>
-                    {item.type === "text" ? (
-                      <p className="line-clamp-2 text-sm leading-6 text-muted-foreground">
-                        {item.excerpt ?? "（沒有內文）"}
-                      </p>
-                    ) : null}
-                    <div className="mt-auto flex flex-wrap gap-2">
-                      {item.type === "image" ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-9"
-                          onClick={() => {
-                            setPreviewFailed(false);
-                            setPreview(item);
-                          }}
-                        >
-                          <ImageIcon />
-                          預覽
-                        </Button>
-                      ) : null}
-                      {item.type === "text" ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-9"
-                          onClick={() => void openNote(item)}
-                        >
-                          <FileText />
-                          查看
-                        </Button>
-                      ) : null}
-                      <Button variant="outline" size="sm" className="h-9" asChild>
-                        <a href={`/api/items/${item.id}/content?disposition=attachment`}>
-                          <Download />
-                          下載
-                        </a>
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        className="h-9"
-                        onClick={() => setPendingDelete(item)}
-                      >
-                        <Trash2 />
-                        刪除
-                      </Button>
-                    </div>
-                  </div>
-                </article>
-              </li>
-            ))}
-          </ul>
+                </section>
+              );
+            })}
+          </div>
         )}
       </main>
 
@@ -664,6 +908,142 @@ export function LibraryApp({ user }: { user: PublicUser }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={Boolean(tagTarget)}
+        onOpenChange={(open) => {
+          if (!open) setTagTarget(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>加上標籤</DialogTitle>
+            <DialogDescription>點清單上的標籤可以篩選。這裡可以新增或拿掉。</DialogDescription>
+          </DialogHeader>
+          {tagTarget && tagTarget.tags.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {tagTarget.tags.map((tag) => (
+                <Button
+                  key={tag}
+                  variant="outline"
+                  size="sm"
+                  disabled={savingMeta}
+                  onClick={() => {
+                    const next = tagTarget.tags.filter(
+                      (entry) => entry.toLocaleLowerCase() !== tag.toLocaleLowerCase(),
+                    );
+                    void patchItem(tagTarget, { tags: next }).then((ok) => {
+                      if (ok) setTagTarget({ ...tagTarget, tags: next });
+                    });
+                  }}
+                >
+                  {tag} · 移除
+                </Button>
+              ))}
+            </div>
+          ) : null}
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="tag-draft">新標籤</Label>
+            <Input
+              id="tag-draft"
+              value={tagDraft}
+              onChange={(event) => setTagDraft(event.target.value)}
+              className="h-11 text-base md:text-sm"
+              maxLength={40}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTagTarget(null)} disabled={savingMeta}>
+              關閉
+            </Button>
+            <Button
+              disabled={savingMeta || !tagDraft.trim() || !tagTarget}
+              onClick={() => {
+                if (!tagTarget) return;
+                const next = [...tagTarget.tags, tagDraft];
+                void patchItem(tagTarget, { tags: next }).then((ok) => {
+                  if (!ok) return;
+                  setTagDraft("");
+                  setTagTarget(null);
+                });
+              }}
+            >
+              {savingMeta ? "儲存中…" : "新增"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(groupTarget)}
+        onOpenChange={(open) => {
+          if (!open) setGroupTarget(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>移到分組</DialogTitle>
+            <DialogDescription>空白或未分組會把項目放到最後一個區段。</DialogDescription>
+          </DialogHeader>
+          {knownGroups.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {knownGroups.map((name) => (
+                <Button
+                  key={name}
+                  variant={groupDraft === name ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setGroupDraft(name)}
+                >
+                  {name}
+                </Button>
+              ))}
+            </div>
+          ) : null}
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="group-draft">分組名稱</Label>
+            <Input
+              id="group-draft"
+              value={groupDraft}
+              onChange={(event) => setGroupDraft(event.target.value)}
+              className="h-11 text-base md:text-sm"
+              maxLength={80}
+              placeholder="例如工作"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={savingMeta || !groupTarget}
+              onClick={() => {
+                if (!groupTarget) return;
+                void patchItem(groupTarget, { group: null }).then((ok) => {
+                  if (ok) setGroupTarget(null);
+                });
+              }}
+            >
+              未分組
+            </Button>
+            <Button
+              disabled={savingMeta || !groupTarget}
+              onClick={() => {
+                if (!groupTarget) return;
+                void patchItem(groupTarget, { group: groupDraft }).then((ok) => {
+                  if (ok) setGroupTarget(null);
+                });
+              }}
+            >
+              {savingMeta ? "儲存中…" : "移動"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <div className="fixed inset-x-0 z-30 px-4 sm:hidden bottom-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <Button className="h-11 w-full shadow-md" onClick={() => setNoteOpen(true)}>
+          <PenLine />
+          寫筆記
+        </Button>
+      </div>
     </div>
   );
 }

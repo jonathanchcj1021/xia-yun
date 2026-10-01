@@ -7,7 +7,9 @@ import {
   isRasterMime,
   normalizeMime,
   normalizeNoteBody,
+  normalizeGroup,
   normalizeNoteTitle,
+  normalizeTags,
   sanitizeItemName,
 } from "@/lib/validators";
 
@@ -53,8 +55,25 @@ async function createNote(request: NextRequest, userId: string) {
   if ("error" in body) {
     return jsonError(400, "VALIDATION", body.error ?? "筆記內文格式不正確");
   }
-  const item = await createTextItem(userId, title.title, body.body);
+  const meta = readOptionalMeta(parsed.value);
+  if ("error" in meta) return jsonError(400, "VALIDATION", meta.error);
+  const item = await createTextItem(userId, title.title, body.body, meta);
   return jsonOk({ item }, 201);
+}
+
+function readOptionalMeta(value: Record<string, unknown>) {
+  const meta: { group?: string | null; tags?: string[] } = {};
+  if ("group" in value) {
+    const group = normalizeGroup(value.group);
+    if ("error" in group) return { error: group.error ?? "分組格式不正確" };
+    meta.group = group.group;
+  }
+  if ("tags" in value) {
+    const tags = normalizeTags(value.tags);
+    if ("error" in tags) return { error: tags.error ?? "標籤格式不正確" };
+    meta.tags = tags.tags;
+  }
+  return meta;
 }
 
 async function createUpload(request: NextRequest, userId: string) {
@@ -107,6 +126,8 @@ async function createUpload(request: NextRequest, userId: string) {
       ? nameField
       : uploaded.name;
   const name = sanitizeItemName(rawName) || "未命名檔案";
+  const meta = readUploadMeta(form);
+  if ("error" in meta) return jsonError(400, "VALIDATION", meta.error);
   const bytes = Buffer.from(await uploaded.arrayBuffer());
   const item = await createBlobItem({
     userId,
@@ -114,6 +135,37 @@ async function createUpload(request: NextRequest, userId: string) {
     name,
     mimeType,
     bytes,
+    group: meta.group,
+    tags: meta.tags,
   });
   return jsonOk({ item }, 201);
+}
+
+function readUploadMeta(form: FormData) {
+  const meta: { group?: string | null; tags?: string[] } = {};
+  if (form.has("group")) {
+    const group = normalizeGroup(form.get("group"));
+    if ("error" in group) return { error: group.error ?? "分組格式不正確" };
+    meta.group = group.group;
+  }
+  if (form.has("tags")) {
+    const raw = form.get("tags");
+    let parsed: unknown = raw;
+    if (typeof raw === "string") {
+      const trimmed = raw.trim();
+      if (trimmed.startsWith("[")) {
+        try {
+          parsed = JSON.parse(trimmed) as unknown;
+        } catch {
+          return { error: "標籤格式不正確" };
+        }
+      } else {
+        parsed = trimmed ? trimmed.split(",") : [];
+      }
+    }
+    const tags = normalizeTags(parsed);
+    if ("error" in tags) return { error: tags.error ?? "標籤格式不正確" };
+    meta.tags = tags.tags;
+  }
+  return meta;
 }

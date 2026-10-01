@@ -10,6 +10,9 @@ export const MAX_PASSWORD_LENGTH = 128;
 export const MAX_NOTE_TITLE = 200;
 export const MAX_NOTE_BODY = 100_000;
 export const MAX_ITEM_NAME = 255;
+export const MAX_GROUP_LENGTH = 80;
+export const MAX_TAG_LENGTH = 40;
+export const MAX_TAGS = 20;
 
 export const RASTER_MIME_TYPES = new Set([
   "image/jpeg",

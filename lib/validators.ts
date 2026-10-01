@@ -1,7 +1,10 @@
 import {
   MAX_EMAIL_LENGTH,
+  MAX_GROUP_LENGTH,
   MAX_ITEM_NAME,
   MAX_NOTE_BODY,
+  MAX_TAG_LENGTH,
+  MAX_TAGS,
   MAX_NOTE_TITLE,
   MAX_PASSWORD_LENGTH,
   MIN_PASSWORD_LENGTH,
@@ -64,6 +67,37 @@ export function normalizeNoteTitle(value: unknown) {
     return { error: "筆記標題最長 200 個字元" as const };
   }
   return { title };
+}
+
+export function normalizeGroup(value: unknown) {
+  if (value == null) return { group: null as string | null };
+  if (typeof value !== "string") return { error: "分組格式不正確" as const };
+  const group = value.trim();
+  if (!group) return { group: null };
+  if (group.length > MAX_GROUP_LENGTH) {
+    return { error: "分組最長 80 個字元" as const };
+  }
+  return { group };
+}
+
+export function normalizeTags(value: unknown) {
+  if (!Array.isArray(value)) return { error: "標籤格式不正確" as const };
+  const tags: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (typeof entry !== "string") return { error: "標籤格式不正確" as const };
+    const tag = entry.trim();
+    if (!tag) continue;
+    if (tag.length > MAX_TAG_LENGTH) {
+      return { error: "每個標籤最長 40 個字元" as const };
+    }
+    const key = tag.toLocaleLowerCase();
+    if (seen.has(key)) continue;
+    if (tags.length >= MAX_TAGS) return { error: "標籤最多 20 個" as const };
+    seen.add(key);
+    tags.push(tag);
+  }
+  return { tags };
 }
 
 export function normalizeNoteBody(value: unknown) {

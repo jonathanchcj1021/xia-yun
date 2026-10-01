@@ -51,9 +51,18 @@ function migrate(database: DatabaseSync) {
 
     CREATE INDEX IF NOT EXISTS passkeys_user ON passkeys (user_id);
   `);
-  const columns = database.prepare("PRAGMA table_info(passkeys)").all() as { name: string }[];
-  if (!columns.some((column) => column.name === "rp_id")) {
+  const passkeyColumns = database.prepare("PRAGMA table_info(passkeys)").all() as {
+    name: string;
+  }[];
+  if (!passkeyColumns.some((column) => column.name === "rp_id")) {
     database.exec("ALTER TABLE passkeys ADD COLUMN rp_id TEXT");
+  }
+  const itemColumns = database.prepare("PRAGMA table_info(items)").all() as { name: string }[];
+  if (!itemColumns.some((column) => column.name === "item_group")) {
+    database.exec("ALTER TABLE items ADD COLUMN item_group TEXT");
+  }
+  if (!itemColumns.some((column) => column.name === "tags")) {
+    database.exec("ALTER TABLE items ADD COLUMN tags TEXT");
   }
   database.exec(`
 

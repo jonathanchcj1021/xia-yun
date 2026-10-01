@@ -43,9 +43,10 @@ npm run dev
 | POST | `/api/auth/passkey/register/verify` | 已登入。JSON 本體是瀏覽器的註冊結果。 |
 | POST | `/api/auth/passkey/login/options` | JSON `{ "email" }`。這個網站已有通行密鑰時回傳 WebAuthn 登入選項；否則 `400`，請改用密碼登入後按「註冊通行密鑰」。 |
 | POST | `/api/auth/passkey/login/verify` | JSON `{ "email", "response", "client"? }`。成功時設定 cookie；`client` 為 `"native"` 時另含 `token`。 |
-| GET | `/api/items` | 自己的項目，新的在前。清單不含筆記全文，文字項目有 `excerpt`。 |
-| POST | `/api/items` | 檔案用 `multipart/form-data`；筆記用 JSON `{ "type": "text", "title", "body" }`。 |
-| GET | `/api/items/[id]` | 單筆中繼資料。筆記含 `body`。 |
+| GET | `/api/items` | 自己的項目，新的在前。清單不含筆記全文，文字項目有 `excerpt`。每筆都有 `group`（`null` 表示未分組）與 `tags`。 |
+| POST | `/api/items` | 檔案用 `multipart/form-data`；筆記用 JSON `{ "type": "text", "title", "body" }`。兩者都可選帶 `group` 與 `tags`。 |
+| GET | `/api/items/[id]` | 單筆中繼資料。筆記含 `body`。含 `group` 與 `tags`。 |
+| PATCH | `/api/items/[id]` | JSON `{ "group"?, "tags"? }`。省略的欄位不變。`group` 為 `null` 或 `""` 表示未分組。`tags` 會整份取代。只限擁有者；未登入 `401`。 |
 | GET | `/api/items/[id]/content` | 下載或內嵌圖片。`?disposition=attachment` 強制下載。 |
 | DELETE | `/api/items/[id]` | 刪除自己的項目與檔案內容。 |
 

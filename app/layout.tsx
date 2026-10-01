@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Noto_Sans_TC } from "next/font/google";
 import "./globals.css";
 
@@ -12,6 +12,12 @@ const noto = Noto_Sans_TC({
 export const metadata: Metadata = {
   title: "匣雲",
   description: "同一個帳號裡的檔案、圖片與文字筆記。",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
