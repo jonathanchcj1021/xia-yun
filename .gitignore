@@ -42,3 +42,8 @@ next-env.d.ts
 
 # local account data and file bytes
 /data/
+
+# cloudflare / opennext
+.open-next/
+.wrangler/
+.dev.vars
