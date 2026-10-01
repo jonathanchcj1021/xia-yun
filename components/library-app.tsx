@@ -81,6 +81,44 @@ function formatSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function noteCopyText(title: string, body: string) {
+  const name = title.trim();
+  const text = body.trim();
+  if (name && text) return `${name}\n\n${text}`;
+  if (name) return name;
+  return text;
+}
+
+async function writeClipboard(text: string) {
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      /* mobile browsers may reject the async clipboard API */
+    }
+  }
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "");
+  area.style.position = "fixed";
+  area.style.top = "0";
+  area.style.left = "0";
+  area.style.opacity = "0";
+  document.body.appendChild(area);
+  area.focus();
+  area.select();
+  area.setSelectionRange(0, text.length);
+  let copied = false;
+  try {
+    copied = document.execCommand("copy");
+  } catch {
+    copied = false;
+  }
+  area.remove();
+  return copied;
+}
+
 function compareItems(sortMode: SortMode, left: Item, right: Item) {
   if (sortMode === "name") return left.name.localeCompare(right.name, "zh-Hant");
   const delta = new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
@@ -138,6 +176,7 @@ export function LibraryApp({ user }: { user: PublicUser }) {
   const [groupTarget, setGroupTarget] = useState<Item | null>(null);
   const [groupDraft, setGroupDraft] = useState("");
   const [savingMeta, setSavingMeta] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
@@ -356,6 +395,33 @@ export function LibraryApp({ user }: { user: PublicUser }) {
     } catch {
       setActionError("刪除分組時無法連線");
       setDeleting(false);
+    }
+  }
+
+  async function copyNote(item: Item) {
+    setActionError(null);
+    try {
+      const response = await fetch(`/api/items/${item.id}`);
+      if (response.status === 401) {
+        goToLogin();
+        return;
+      }
+      if (!response.ok) {
+        setActionError(await errorMessage(response));
+        return;
+      }
+      const data = (await response.json()) as { item: Item };
+      const copied = await writeClipboard(noteCopyText(data.item.name, data.item.body ?? ""));
+      if (!copied) {
+        setActionError("無法複製這則筆記");
+        return;
+      }
+      setCopiedId(item.id);
+      window.setTimeout(() => {
+        setCopiedId((current) => (current === item.id ? null : current));
+      }, 2000);
+    } catch {
+      setActionError("無法複製這則筆記");
     }
   }
 
@@ -787,15 +853,25 @@ export function LibraryApp({ user }: { user: PublicUser }) {
                                     </Button>
                                   ) : null}
                                   {item.type === "text" ? (
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-9"
-                                      onClick={() => void openNote(item)}
-                                    >
-                                      <FileText />
-                                      查看
-                                    </Button>
+                                    <>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-9"
+                                        onClick={() => void copyNote(item)}
+                                      >
+                                        {copiedId === item.id ? "已複製" : "複製"}
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-9"
+                                        onClick={() => void openNote(item)}
+                                      >
+                                        <FileText />
+                                        查看
+                                      </Button>
+                                    </>
                                   ) : null}
                                   <Button variant="outline" size="sm" className="h-9" asChild>
                                     <a href={`/api/items/${item.id}/content?disposition=attachment`}>
