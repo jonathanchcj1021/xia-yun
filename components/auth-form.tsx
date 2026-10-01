@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Mark } from "@/components/mark";
@@ -9,6 +9,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 type Mode = "login" | "register";
+
+function useHydrated() {
+  return useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
+}
 
 async function errorMessage(response: Response) {
   try {
@@ -27,6 +35,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const ready = useHydrated();
   const router = useRouter();
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -88,7 +97,6 @@ export function AuthForm({ mode }: { mode: Mode }) {
             <Label htmlFor="email">電子郵件</Label>
             <Input
               id="email"
-              name="email"
               type="email"
               autoComplete="email"
               inputMode="email"
@@ -103,7 +111,6 @@ export function AuthForm({ mode }: { mode: Mode }) {
             <Label htmlFor="password">密碼</Label>
             <Input
               id="password"
-              name="password"
               type="password"
               autoComplete={isRegister ? "new-password" : "current-password"}
               required
@@ -118,7 +125,6 @@ export function AuthForm({ mode }: { mode: Mode }) {
               <Label htmlFor="confirm">再輸入一次密碼</Label>
               <Input
                 id="confirm"
-                name="confirm"
                 type="password"
                 autoComplete="new-password"
                 required
@@ -136,7 +142,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
               {error}
             </p>
           ) : null}
-          <Button type="submit" className="h-11" disabled={pending}>
+          <Button type="submit" className="h-11" disabled={!ready || pending}>
             {pending
               ? isRegister
                 ? "建立中…"
