@@ -29,5 +29,32 @@
       "binding": "BLOBS",
       "bucket_name": "xia-yun"
     }
-  ]
+  ],
+  "env": {
+    "preview": {
+      "name": "xia-yun-preview",
+      "services": [
+        {
+          "binding": "WORKER_SELF_REFERENCE",
+          "service": "xia-yun-preview"
+        }
+      ],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "xia-yun-preview",
+          "database_id": "63fecd73-d31d-4810-b718-c7f867c3d274"
+        }
+      ],
+      "vars": {
+        "WEBAUTHN_RP_ID": "xia-yun-preview.jonathanchcj1021.workers.dev"
+      },
+      "r2_buckets": [
+        {
+          "binding": "BLOBS",
+          "bucket_name": "xia-yun-preview"
+        }
+      ]
+    }
+  }
 }

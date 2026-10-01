@@ -57,7 +57,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy --name xia-yun-preview
+          command: deploy --env preview
 
   deploy-production:
     name: 部署至 Cloudflare (Production 正式環境)
