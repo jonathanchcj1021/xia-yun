@@ -2,12 +2,19 @@ package app.xiayun.core
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import okhttp3.CookieJar
 import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -66,7 +73,7 @@ class XiaYunApi internal constructor(
         return raw.decode { body ->
             val array = apiJson.parseToJsonElement(body.text()).jsonObject["items"]?.jsonArray
                 ?: return@decode emptyList()
-            array.map { apiJson.decodeFromJsonElement(CloudItem.serializer(), it) }
+            array.map { apiJson.decodeFromJsonElement(CloudItem.serializer(), normalizeItemElement(it)) }
         }
     }
 
@@ -81,6 +88,47 @@ class XiaYunApi internal constructor(
         val builder = authed("/api/items/$id/content", session, query) ?: return badUrl()
         val raw = execute(builder.get().header("Accept", "*/*").build())
         return raw.map { it.bytes }
+    }
+
+    suspend fun patchItem(
+        session: AuthSession,
+        id: String,
+        group: String? = null,
+        tags: List<String>? = null,
+        setGroup: Boolean = false,
+        setTags: Boolean = false,
+    ): ApiResult<ItemPatchResult?> {
+        if (!setGroup && !setTags) {
+            return ApiResult.Err(ApiError(0, "VALIDATION", ClientMessages.GENERIC))
+        }
+        val payload = buildJsonObject {
+            if (setGroup) {
+                val cleaned = canonicalGroup(group)
+                if (cleaned == null) put("group", JsonNull) else put("group", cleaned)
+            }
+            if (setTags) {
+                putJsonArray("tags") {
+                    (tags ?: emptyList()).forEach { add(it) }
+                }
+            }
+        }
+        val builder = authed("/api/items/$id", session) ?: return badUrl()
+        val raw = execute(builder.patch(encode(payload).toRequestBody(JSON)).build())
+        if (raw is ApiResult.Err && raw.error.status == 405) {
+            return ApiResult.Err(raw.error.copy(message = "伺服器尚未提供分組與標籤更新"))
+        }
+        return raw.decode { body ->
+            val text = body.text()
+            if (text.isBlank()) return@decode null
+            val root = apiJson.parseToJsonElement(text).jsonObject
+            val element = root["item"] ?: root
+            if (element !is JsonObject || element["id"] == null) return@decode null
+            ItemPatchResult(
+                item = apiJson.decodeFromJsonElement(CloudItem.serializer(), normalizeItemElement(element)),
+                echoedGroup = element.containsKey("group"),
+                echoedTags = element.containsKey("tags"),
+            )
+        }
     }
 
     suspend fun deleteItem(session: AuthSession, id: String): ApiResult<Unit> {
@@ -197,9 +245,30 @@ class XiaYunApi internal constructor(
     }
 
     private fun parseItem(text: String): CloudItem {
-        val item = apiJson.parseToJsonElement(text).jsonObject["item"]?.jsonObject
+        val item = apiJson.parseToJsonElement(text).jsonObject["item"]
             ?: error("missing item")
-        return apiJson.decodeFromJsonElement(CloudItem.serializer(), item)
+        return apiJson.decodeFromJsonElement(CloudItem.serializer(), normalizeItemElement(item))
+    }
+
+    private fun normalizeItemElement(element: JsonElement): JsonObject {
+        val source = element as? JsonObject ?: return buildJsonObject { }
+        val fields = source.toMutableMap()
+        val group = fields["group"]
+        val cleanedGroup = when (group) {
+            null, is JsonNull -> null
+            is JsonPrimitive -> group.contentOrNull?.let { canonicalGroup(it) }
+            else -> null
+        }
+        if (cleanedGroup == null) fields.remove("group") else fields["group"] = JsonPrimitive(cleanedGroup)
+        val tags = when (val raw = fields["tags"]) {
+            is JsonArray -> raw.mapNotNull { entry ->
+                val text = (entry as? JsonPrimitive)?.contentOrNull ?: return@mapNotNull null
+                normalizeTag(text).takeIf { it.isNotEmpty() }
+            }
+            else -> emptyList()
+        }
+        fields["tags"] = JsonArray(tags.map { JsonPrimitive(it) })
+        return JsonObject(fields)
     }
 
     private fun anonymous(path: String, query: Map<String, String> = emptyMap()): Request.Builder? {

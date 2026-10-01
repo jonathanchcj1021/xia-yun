@@ -54,6 +54,14 @@ data class CloudItem(
     val createdAt: String = "",
     val excerpt: String? = null,
     val body: String? = null,
+    val group: String? = null,
+    val tags: List<String> = emptyList(),
+)
+
+data class ItemPatchResult(
+    val item: CloudItem,
+    val echoedGroup: Boolean,
+    val echoedTags: Boolean,
 )
 
 data class Upload(

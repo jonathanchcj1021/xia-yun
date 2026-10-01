@@ -1,7 +1,9 @@
 package app.xiayun.core
 
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
@@ -188,6 +190,8 @@ class XiaYunApiTest {
         val items = (api().listItems(session) as ApiResult.Ok).value
         assertEquals("備忘", items.single().name)
         assertEquals("text", items.single().type)
+        assertNull(items.single().group)
+        assertEquals(emptyList<String>(), items.single().tags)
 
         val note = (api().createNote(session, " 標題 ", "內文") as ApiResult.Ok).value
         assertEquals("內文", note.body)
@@ -229,6 +233,52 @@ class XiaYunApiTest {
         val delete = server.takeRequest()
         assertEquals("DELETE", delete.method)
         assertEquals("/api/items/3", delete.path)
+    }
+
+    @Test
+    fun patchReplacesTagsAndClearsGroup() = runBlocking {
+        val session = AuthSession(token = "tok")
+        server.enqueue(
+            MockResponse().setBody(
+                """{"items":[{"id":"1","type":"file","name":"稅.pdf","size":3,"createdAt":"2026-05-11T03:20:00Z","group":" 家裡的紙 ","tags":["稅務",""]}]}""",
+            ),
+        )
+        server.enqueue(
+            MockResponse().setBody(
+                """{"item":{"id":"1","type":"file","name":"稅.pdf","size":3,"createdAt":"2026-05-11T03:20:00Z","group":"家裡的紙","tags":["稅務","重要"]}}""",
+            ),
+        )
+        server.enqueue(MockResponse().setBody("""{"ok":true}"""))
+        server.enqueue(MockResponse().setResponseCode(405).setBody("""{"error":"Method Not Allowed"}"""))
+
+        val listed = (api().listItems(session) as ApiResult.Ok).value.single()
+        assertEquals("家裡的紙", listed.group)
+        assertEquals(listOf("稅務"), listed.tags)
+
+        val tagged = api().patchItem(session, "1", tags = listOf("稅務", "重要"), setTags = true) as ApiResult.Ok
+        assertEquals(listOf("稅務", "重要"), tagged.value!!.item.tags)
+        assertTrue(tagged.value!!.echoedTags)
+        assertTrue(tagged.value!!.echoedGroup)
+
+        val cleared = api().patchItem(session, "1", group = "", setGroup = true) as ApiResult.Ok
+        assertNull(cleared.value)
+
+        val missing = api().patchItem(session, "1", group = "京都行", setGroup = true) as ApiResult.Err
+        assertEquals("伺服器尚未提供分組與標籤更新", missing.error.message)
+
+        server.takeRequest()
+        val tagsCall = server.takeRequest()
+        assertEquals("PATCH", tagsCall.method)
+        assertEquals("/api/items/1", tagsCall.path)
+        assertEquals("Bearer tok", tagsCall.getHeader("Authorization"))
+        val tagsBody = apiJson.parseToJsonElement(tagsCall.body.readUtf8()).jsonObject
+        assertNull(tagsBody["group"])
+        assertEquals(listOf("稅務", "重要"), tagsBody["tags"]!!.jsonArray.map { it.jsonPrimitive.content })
+
+        val groupCall = server.takeRequest()
+        val groupBody = apiJson.parseToJsonElement(groupCall.body.readUtf8()).jsonObject
+        assertTrue(groupBody["group"] is kotlinx.serialization.json.JsonNull)
+        assertNull(groupBody["tags"])
     }
 
     @Test

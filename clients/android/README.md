@@ -27,3 +27,4 @@ cd clients/android
 - 登入成功後可以啟用生物辨識。下次開啟時，用系統生物辨識解開已儲存的工作階段。
 - 通行密鑰登入會呼叫 `/api/auth/passkey/login/options` 與 `/api/auth/passkey/login/verify`。若伺服器回 404，或這台裝置無法完成 Credential Manager，會顯示錯誤，不會當掉。
 - 列出、上傳、預覽圖片、新增筆記、下載、刪除自己的項目。單一檔案上限 32 MB。
+- 分組與標籤會用 `PATCH /api/items/{id}` 寫回。清單可以依分組摺疊，並用名稱、筆記內文、類型與標籤一起篩選，排序為最新、最舊或名稱。

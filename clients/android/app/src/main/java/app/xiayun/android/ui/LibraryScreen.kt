@@ -5,11 +5,9 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,8 +17,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -77,9 +73,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.xiayun.core.ApiResult
 import app.xiayun.core.CloudItem
+import app.xiayun.core.UNGROUPED_LABEL
 import app.xiayun.core.Upload
+import app.xiayun.core.canonicalGroup
 import app.xiayun.core.formatBytes
-import app.xiayun.core.formatTimestamp
+import app.xiayun.core.formatCatalogDate
+import app.xiayun.core.libraryGroupNames
 import app.xiayun.core.typeLabel
 import kotlinx.coroutines.launch
 
@@ -92,7 +91,10 @@ fun LibraryScreen(
     biometricAvailable: Boolean,
     onRefresh: () -> Unit,
     onUpload: (List<Upload>) -> Unit,
-    onCreateNote: (String, String) -> Unit,
+    onCreateNote: (String, String, String?) -> Unit,
+    onAddTag: (CloudItem, String) -> Unit,
+    onRemoveTag: (CloudItem, String) -> Unit,
+    onMove: (CloudItem, String?) -> Unit,
     onOpen: (CloudItem) -> Unit,
     onCloseDetail: () -> Unit,
     onAskDelete: (CloudItem) -> Unit,
@@ -111,6 +113,10 @@ fun LibraryScreen(
     var noteOpen by remember { mutableStateOf(false) }
     var noteTitle by remember { mutableStateOf("") }
     var noteBody by remember { mutableStateOf("") }
+    var noteGroup by remember { mutableStateOf<String?>(null) }
+    var noteCustom by remember { mutableStateOf(false) }
+    var noteCustomName by remember { mutableStateOf("") }
+    var noteGroupMenu by remember { mutableStateOf(false) }
     var noteError by remember { mutableStateOf<String?>(null) }
     val openFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         scope.launch {
@@ -159,8 +165,13 @@ fun LibraryScreen(
         DetailScreen(
             item = detail,
             loading = state.detailLoading,
+            groups = libraryGroupNames(state.items.orEmpty()),
+            busy = state.updatingId == detail.id,
             onBack = onCloseDetail,
             onDelete = { onAskDelete(detail) },
+            onAddTag = { onAddTag(detail, it) },
+            onRemoveTag = { onRemoveTag(detail, it) },
+            onMove = { onMove(detail, it) },
             onBanner = onBanner,
             fetchContent = fetchContent,
         )
@@ -261,6 +272,9 @@ fun LibraryScreen(
                             onClick = {
                                 noteTitle = ""
                                 noteBody = ""
+                                noteGroup = null
+                                noteCustom = false
+                                noteCustomName = ""
                                 noteError = null
                                 noteOpen = true
                             },
@@ -274,49 +288,32 @@ fun LibraryScreen(
                 }
             },
         ) { padding ->
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
-                when {
-                    state.loading && state.items == null -> CircularProgressIndicator(Modifier.padding(48.dp))
-                    state.error != null && state.items.isNullOrEmpty() -> Column(
-                        Modifier.padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Text(state.error, color = MaterialTheme.colorScheme.error)
-                        TextButton(onClick = onRefresh) { Text("再試一次") }
-                    }
-                    state.items.isNullOrEmpty() -> Column(
-                        Modifier.padding(28.dp).widthIn(max = 420.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Mark()
-                        Spacer(Modifier.height(12.dp))
-                        Text("匣子還是空的", style = MaterialTheme.typography.titleLarge)
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "上傳檔案、圖片，或寫一則筆記。內容只屬於這個帳號。",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    else -> LazyColumn(
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.widthIn(max = 720.dp),
-                    ) {
-                        if (!state.banner.isNullOrBlank()) {
-                            item {
-                                Banner(state.banner, onClearBanner)
-                            }
-                        }
-                        items(state.items, key = { it.id }) { item ->
-                            ItemRow(item, onClick = { onOpen(item) }, onDelete = { onAskDelete(item) })
-                        }
-                    }
+            when {
+                state.loading && state.items == null -> Box(
+                    Modifier.fillMaxSize().padding(padding),
+                    contentAlignment = Alignment.Center,
+                ) { CircularProgressIndicator() }
+                state.error != null && state.items.isNullOrEmpty() -> Column(
+                    Modifier.fillMaxSize().padding(padding).padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text(state.error, color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = onRefresh) { Text("再試一次") }
                 }
-                if (!state.banner.isNullOrBlank() && !state.items.isNullOrEmpty()) {
-                    // banner is inside the list
-                } else if (!state.banner.isNullOrBlank() && state.items.isNullOrEmpty()) {
-                    Banner(state.banner, onClearBanner, Modifier.padding(16.dp))
-                }
+                else -> LibraryBrowser(
+                    items = state.items.orEmpty(),
+                    notice = state.notice,
+                    banner = state.banner,
+                    updatingId = state.updatingId,
+                    onOpen = onOpen,
+                    onDelete = onAskDelete,
+                    onAddTag = onAddTag,
+                    onRemoveTag = onRemoveTag,
+                    onMove = onMove,
+                    onClearBanner = onClearBanner,
+                    modifier = Modifier.fillMaxSize().padding(padding),
+                )
             }
         }
     }
@@ -364,6 +361,44 @@ fun LibraryScreen(
                             Text(noteError!!, color = MaterialTheme.colorScheme.error)
                         }
                         Spacer(Modifier.height(8.dp))
+                        val groups = libraryGroupNames(state.items.orEmpty())
+                        Box {
+                            OutlinedButton(onClick = { noteGroupMenu = true }, modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    if (noteCustom) "新分組" else "放到 ${canonicalGroup(noteGroup) ?: UNGROUPED_LABEL}",
+                                )
+                            }
+                            DropdownMenu(expanded = noteGroupMenu, onDismissRequest = { noteGroupMenu = false }) {
+                                groups.forEach { name ->
+                                    DropdownMenuItem(
+                                        text = { Text(name) },
+                                        onClick = {
+                                            noteGroupMenu = false
+                                            noteCustom = false
+                                            noteGroup = if (name == UNGROUPED_LABEL) null else name
+                                        },
+                                    )
+                                }
+                                DropdownMenuItem(
+                                    text = { Text("新分組…") },
+                                    onClick = {
+                                        noteGroupMenu = false
+                                        noteCustom = true
+                                    },
+                                )
+                            }
+                        }
+                        if (noteCustom) {
+                            Spacer(Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = noteCustomName,
+                                onValueChange = { noteCustomName = it },
+                                label = { Text("新分組名稱") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
                         Row(
                             Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.End,
@@ -377,8 +412,10 @@ fun LibraryScreen(
                                     if (noteTitle.isBlank()) {
                                         noteError = "請填寫筆記標題"
                                     } else {
+                                        noteError = null
                                         noteOpen = false
-                                        onCreateNote(noteTitle, noteBody)
+                                        val group = if (noteCustom) noteCustomName else noteGroup
+                                        onCreateNote(noteTitle, noteBody, group)
                                     }
                                 },
                                 enabled = !state.savingNote,
@@ -407,7 +444,7 @@ fun LibraryScreen(
 }
 
 @Composable
-private fun Banner(message: String, onClear: () -> Unit, modifier: Modifier = Modifier) {
+internal fun Banner(message: String, onClear: () -> Unit, modifier: Modifier = Modifier) {
     Card(modifier.fillMaxWidth()) {
         Row(
             Modifier.padding(12.dp),
@@ -419,46 +456,27 @@ private fun Banner(message: String, onClear: () -> Unit, modifier: Modifier = Mo
     }
 }
 
-@Composable
-private fun ItemRow(item: CloudItem, onClick: () -> Unit, onDelete: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(iconFor(item.type), contentDescription = typeLabel(item.type), tint = MaterialTheme.colorScheme.primary)
-            Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                Text(item.name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "${typeLabel(item.type)} · ${formatBytes(item.size)} · ${formatTimestamp(item.createdAt)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (!item.excerpt.isNullOrBlank()) {
-                    Text(
-                        item.excerpt!!,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-            }
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Filled.Delete, contentDescription = "刪除")
-            }
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DetailScreen(
     item: CloudItem,
     loading: Boolean,
+    groups: List<String>,
+    busy: Boolean,
     onBack: () -> Unit,
     onDelete: () -> Unit,
+    onAddTag: (String) -> Unit,
+    onRemoveTag: (String) -> Unit,
+    onMove: (String?) -> Unit,
     onBanner: (String) -> Unit,
     fetchContent: suspend (String, Boolean) -> ApiResult<ByteArray>,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var tagDraft by remember(item.id) { mutableStateOf<String?>(null) }
+    var moveMenu by remember(item.id) { mutableStateOf(false) }
+    var customGroup by remember(item.id) { mutableStateOf(false) }
+    var customName by remember(item.id) { mutableStateOf("") }
     var bitmap by remember(item.id) { mutableStateOf<Bitmap?>(null) }
     var previewFailed by remember(item.id) { mutableStateOf(false) }
     var previewLoading by remember(item.id) { mutableStateOf(item.type == "image") }
@@ -517,9 +535,81 @@ private fun DetailScreen(
                 .padding(16.dp),
         ) {
             Text(
-                "${typeLabel(item.type)} · ${formatBytes(item.size)} · ${formatTimestamp(item.createdAt)}",
+                "${typeLabel(item.type)} · ${formatCatalogDate(item.createdAt)} · ${formatBytes(item.size)}",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Text(
+                canonicalGroup(item.group) ?: UNGROUPED_LABEL,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (item.tags.isEmpty()) {
+                Text("還沒有標籤", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                Column {
+                    item.tags.forEach { tag ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(tag, modifier = Modifier.weight(1f))
+                            TextButton(onClick = { onRemoveTag(tag) }, enabled = !busy) { Text("移除") }
+                        }
+                    }
+                }
+            }
+            if (tagDraft != null) {
+                OutlinedTextField(
+                    value = tagDraft.orEmpty(),
+                    onValueChange = { tagDraft = it },
+                    label = { Text("加上標籤") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row {
+                    TextButton(onClick = {
+                        onAddTag(tagDraft.orEmpty())
+                        tagDraft = null
+                    }, enabled = !busy) { Text("加上") }
+                    TextButton(onClick = { tagDraft = null }) { Text("取消") }
+                }
+            } else {
+                TextButton(onClick = { tagDraft = "" }, enabled = !busy) { Text("加標籤") }
+            }
+            Box {
+                OutlinedButton(onClick = { moveMenu = true }, enabled = !busy) {
+                    Text("移到 ${canonicalGroup(item.group) ?: UNGROUPED_LABEL}")
+                }
+                DropdownMenu(expanded = moveMenu, onDismissRequest = { moveMenu = false }) {
+                    groups.forEach { name ->
+                        DropdownMenuItem(
+                            text = { Text(name) },
+                            onClick = {
+                                moveMenu = false
+                                customGroup = false
+                                onMove(if (name == UNGROUPED_LABEL) null else name)
+                            },
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text("新分組…") },
+                        onClick = {
+                            moveMenu = false
+                            customGroup = true
+                        },
+                    )
+                }
+            }
+            if (customGroup) {
+                OutlinedTextField(
+                    value = customName,
+                    onValueChange = { customName = it },
+                    label = { Text("新分組名稱") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                TextButton(onClick = {
+                    onMove(customName)
+                    customGroup = false
+                    customName = ""
+                }, enabled = !busy) { Text("移過去") }
+            }
             Spacer(Modifier.height(16.dp))
             when (item.type) {
                 "image" -> {
