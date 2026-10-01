@@ -1,0 +1,14 @@
+import SwiftUI
+
+@main
+struct XiaYunApp: App {
+    @StateObject private var model = AppModel()
+
+    var body: some Scene {
+        WindowGroup {
+            RootView()
+                .environmentObject(model)
+                .modifier(PaletteModifier())
+        }
+    }
+}
