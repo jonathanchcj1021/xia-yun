@@ -18,7 +18,7 @@ export const runtime = "nodejs";
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return jsonError(401, "UNAUTHENTICATED", "尚未登入");
-  return jsonOk({ items: listItems(user.id) });
+  return jsonOk({ items: await listItems(user.id) });
 }
 
 export async function DELETE(request: NextRequest) {

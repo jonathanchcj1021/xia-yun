@@ -1,7 +1,5 @@
 import { randomUUID } from "node:crypto";
-import fs from "node:fs/promises";
-import path from "node:path";
-import { blobPath, getDb } from "@/lib/db";
+import { deleteBlob, execute, getBlob, putBlob, queryAll, queryOne } from "@/lib/db";
 import type { ItemType } from "@/lib/constants";
 
 export type ItemRecord = {
@@ -72,23 +70,22 @@ function toItem(row: ItemRow, includeBody: boolean): ItemRecord {
 
 const itemColumns = `id, user_id, type, name, size, mime_type, body, created_at, item_group, tags`;
 
-export function listItems(userId: string) {
-  const rows = getDb()
-    .prepare(
-      `SELECT ${itemColumns} FROM items
-       WHERE user_id = ?
-       ORDER BY created_at DESC`,
-    )
-    .all(userId) as unknown as ItemRow[];
+export async function listItems(userId: string) {
+  const rows = await queryAll<ItemRow>(
+    `SELECT ${itemColumns} FROM items
+     WHERE user_id = ?
+     ORDER BY created_at DESC`,
+    userId,
+  );
   return rows.map((row) => toItem(row, false));
 }
 
-export function getItem(userId: string, itemId: string) {
-  const row = getDb()
-    .prepare(
-      `SELECT ${itemColumns} FROM items WHERE id = ? AND user_id = ?`,
-    )
-    .get(itemId, userId) as unknown as ItemRow | undefined;
+export async function getItem(userId: string, itemId: string) {
+  const row = await queryOne<ItemRow>(
+    `SELECT ${itemColumns} FROM items WHERE id = ? AND user_id = ?`,
+    itemId,
+    userId,
+  );
   if (!row) return null;
   return toItem(row, true);
 }
@@ -102,23 +99,22 @@ export async function createTextItem(
   const id = randomUUID();
   const now = Date.now();
   const size = Buffer.byteLength(body, "utf8");
-  getDb()
-    .prepare(
-      `INSERT INTO items
-        (id, user_id, type, name, size, mime_type, body, created_at, item_group, tags)
-       VALUES (?, ?, 'text', ?, ?, 'text/plain; charset=utf-8', ?, ?, ?, ?)`,
-    )
-    .run(
-      id,
-      userId,
-      title,
-      size,
-      body,
-      now,
-      meta.group ?? null,
-      JSON.stringify(meta.tags ?? []),
-    );
-  return getItem(userId, id)!;
+  await execute(
+    `INSERT INTO items
+      (id, user_id, type, name, size, mime_type, body, created_at, item_group, tags)
+     VALUES (?, ?, 'text', ?, ?, 'text/plain; charset=utf-8', ?, ?, ?, ?)`,
+    id,
+    userId,
+    title,
+    size,
+    body,
+    now,
+    meta.group ?? null,
+    JSON.stringify(meta.tags ?? []),
+  );
+  const created = await getItem(userId, id);
+  if (!created) throw new Error("寫入文字項目後讀不到資料");
+  return created;
 }
 
 export async function createBlobItem(input: {
@@ -132,96 +128,94 @@ export async function createBlobItem(input: {
 }) {
   const id = randomUUID();
   const now = Date.now();
-  const destination = blobPath(input.userId, id);
-  await fs.mkdir(path.dirname(destination), { recursive: true });
-  await fs.writeFile(destination, input.bytes);
+  await putBlob(input.userId, id, input.bytes, input.mimeType);
   try {
-    getDb()
-      .prepare(
-        `INSERT INTO items
-          (id, user_id, type, name, size, mime_type, body, created_at, item_group, tags)
-         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
-      )
-      .run(
-        id,
-        input.userId,
-        input.type,
-        input.name,
-        input.bytes.length,
-        input.mimeType,
-        now,
-        input.group ?? null,
-        JSON.stringify(input.tags ?? []),
-      );
+    await execute(
+      `INSERT INTO items
+        (id, user_id, type, name, size, mime_type, body, created_at, item_group, tags)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
+      id,
+      input.userId,
+      input.type,
+      input.name,
+      input.bytes.length,
+      input.mimeType,
+      now,
+      input.group ?? null,
+      JSON.stringify(input.tags ?? []),
+    );
   } catch (error) {
-    await fs.rm(destination, { force: true });
+    await deleteBlob(input.userId, id);
     throw error;
   }
-  return getItem(input.userId, id)!;
+  const created = await getItem(input.userId, id);
+  if (!created) throw new Error("寫入檔案項目後讀不到資料");
+  return created;
 }
 
-export function updateItemMeta(userId: string, itemId: string, patch: ItemMeta) {
-  const existing = getItem(userId, itemId);
+export async function updateItemMeta(userId: string, itemId: string, patch: ItemMeta) {
+  const existing = await getItem(userId, itemId);
   if (!existing) return null;
   if (patch.group !== undefined) {
-    getDb()
-      .prepare("UPDATE items SET item_group = ? WHERE id = ? AND user_id = ?")
-      .run(patch.group, itemId, userId);
+    await execute(
+      "UPDATE items SET item_group = ? WHERE id = ? AND user_id = ?",
+      patch.group,
+      itemId,
+      userId,
+    );
   }
   if (patch.tags !== undefined) {
-    getDb()
-      .prepare("UPDATE items SET tags = ? WHERE id = ? AND user_id = ?")
-      .run(JSON.stringify(patch.tags), itemId, userId);
+    await execute(
+      "UPDATE items SET tags = ? WHERE id = ? AND user_id = ?",
+      JSON.stringify(patch.tags),
+      itemId,
+      userId,
+    );
   }
   return getItem(userId, itemId);
 }
 
 export async function deleteGroup(userId: string, group: string | null) {
-  const rows = (
+  const rows =
     group == null
-      ? getDb()
-          .prepare(
-            `SELECT id, type FROM items
-             WHERE user_id = ? AND (item_group IS NULL OR item_group = '')`,
-          )
-          .all(userId)
-      : getDb()
-          .prepare(
-            `SELECT id, type FROM items
-             WHERE user_id = ? AND item_group = ?`,
-          )
-          .all(userId, group)
-  ) as unknown as { id: string; type: ItemType }[];
+      ? await queryAll<{ id: string; type: ItemType }>(
+          `SELECT id, type FROM items
+           WHERE user_id = ? AND (item_group IS NULL OR item_group = '')`,
+          userId,
+        )
+      : await queryAll<{ id: string; type: ItemType }>(
+          `SELECT id, type FROM items
+           WHERE user_id = ? AND item_group = ?`,
+          userId,
+          group,
+        );
   const result =
     group == null
-      ? getDb()
-          .prepare(
-            `DELETE FROM items
-             WHERE user_id = ? AND (item_group IS NULL OR item_group = '')`,
-          )
-          .run(userId)
-      : getDb()
-          .prepare("DELETE FROM items WHERE user_id = ? AND item_group = ?")
-          .run(userId, group);
+      ? await execute(
+          `DELETE FROM items
+           WHERE user_id = ? AND (item_group IS NULL OR item_group = '')`,
+          userId,
+        )
+      : await execute("DELETE FROM items WHERE user_id = ? AND item_group = ?", userId, group);
   for (const row of rows) {
     if (row.type === "text") continue;
-    await fs.rm(blobPath(userId, row.id), { force: true });
+    await deleteBlob(userId, row.id);
   }
-  return Number(result.changes);
+  return Number(result.meta?.changes ?? 0);
 }
 
 export async function deleteItem(userId: string, itemId: string) {
-  const existing = getItem(userId, itemId);
+  const existing = await getItem(userId, itemId);
   if (!existing) return false;
-  getDb()
-    .prepare("DELETE FROM items WHERE id = ? AND user_id = ?")
-    .run(itemId, userId);
+  await execute("DELETE FROM items WHERE id = ? AND user_id = ?", itemId, userId);
   if (existing.type !== "text") {
-    await fs.rm(blobPath(userId, itemId), { force: true });
+    await deleteBlob(userId, itemId);
   }
   return true;
 }
 
 export async function readBlob(userId: string, itemId: string) {
-  return fs.readFile(blobPath(userId, itemId));
+  const bytes = await getBlob(userId, itemId);
+  if (!bytes) throw new Error("找不到檔案內容");
+  return Buffer.from(bytes);
 }

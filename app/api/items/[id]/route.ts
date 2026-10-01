@@ -13,7 +13,7 @@ export async function GET(_request: NextRequest, context: Context) {
   if (!user) return jsonError(401, "UNAUTHENTICATED", "尚未登入");
   const { id } = await context.params;
   if (!isUuid(id)) return jsonError(404, "NOT_FOUND", "找不到這個項目");
-  const item = getItem(user.id, id);
+  const item = await getItem(user.id, id);
   if (!item) return jsonError(404, "NOT_FOUND", "找不到這個項目");
   return jsonOk({ item });
 }
@@ -38,7 +38,7 @@ export async function PATCH(request: NextRequest, context: Context) {
     if ("error" in tags) return jsonError(400, "VALIDATION", tags.error ?? "標籤格式不正確");
     patch.tags = tags.tags;
   }
-  const item = updateItemMeta(user.id, id, patch);
+  const item = await updateItemMeta(user.id, id, patch);
   if (!item) return jsonError(404, "NOT_FOUND", "找不到這個項目");
   return jsonOk({ item });
 }
