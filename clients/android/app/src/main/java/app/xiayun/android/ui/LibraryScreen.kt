@@ -100,6 +100,9 @@ fun LibraryScreen(
     onAskDelete: (CloudItem) -> Unit,
     onCancelDelete: () -> Unit,
     onConfirmDelete: () -> Unit,
+    onAskDeleteGroup: (String, Int) -> Unit,
+    onCancelGroupDelete: () -> Unit,
+    onConfirmGroupDelete: () -> Unit,
     onClearBanner: () -> Unit,
     onBanner: (String) -> Unit,
     fetchContent: suspend (String, Boolean) -> ApiResult<ByteArray>,
@@ -308,6 +311,7 @@ fun LibraryScreen(
                     updatingId = state.updatingId,
                     onOpen = onOpen,
                     onDelete = onAskDelete,
+                    onDeleteGroup = onAskDeleteGroup,
                     onAddTag = onAddTag,
                     onRemoveTag = onRemoveTag,
                     onMove = onMove,
@@ -427,8 +431,21 @@ fun LibraryScreen(
         }
     }
 
+    val pendingGroup = state.pendingGroup
     val pending = state.pendingDelete
-    if (pending != null) {
+    if (pendingGroup != null) {
+        AlertDialog(
+            onDismissRequest = { if (!state.deleting) onCancelGroupDelete() },
+            title = { Text("刪除這個分組？") },
+            text = { Text("刪除「${pendingGroup.name}」入面全部 ${pendingGroup.count} 個項目？") },
+            confirmButton = {
+                TextButton(onClick = onConfirmGroupDelete, enabled = !state.deleting) { Text("刪除") }
+            },
+            dismissButton = {
+                TextButton(onClick = onCancelGroupDelete, enabled = !state.deleting) { Text("取消") }
+            },
+        )
+    } else if (pending != null) {
         AlertDialog(
             onDismissRequest = { if (!state.deleting) onCancelDelete() },
             title = { Text("刪除這個項目？") },

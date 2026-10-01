@@ -18,6 +18,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+data class PendingGroupDelete(
+    val name: String,
+    val count: Int,
+)
+
 data class LibraryUiState(
     val items: List<CloudItem>? = null,
     val loading: Boolean = true,
@@ -28,6 +33,7 @@ data class LibraryUiState(
     val detail: CloudItem? = null,
     val detailLoading: Boolean = false,
     val pendingDelete: CloudItem? = null,
+    val pendingGroup: PendingGroupDelete? = null,
     val deleting: Boolean = false,
     val updatingId: String? = null,
     val notice: String? = null,
@@ -189,11 +195,46 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun askDelete(item: CloudItem) {
-        _state.update { it.copy(pendingDelete = item) }
+        _state.update { it.copy(pendingDelete = item, pendingGroup = null) }
     }
 
     fun cancelDelete() {
         _state.update { it.copy(pendingDelete = null) }
+    }
+
+    fun askDeleteGroup(name: String, count: Int) {
+        if (count <= 0 || name.isBlank()) return
+        _state.update { it.copy(pendingGroup = PendingGroupDelete(name, count), pendingDelete = null) }
+    }
+
+    fun cancelGroupDelete() {
+        if (_state.value.deleting) return
+        _state.update { it.copy(pendingGroup = null) }
+    }
+
+    fun confirmGroupDelete() {
+        val pending = _state.value.pendingGroup ?: return
+        val session = container.session.value ?: return
+        val group = canonicalGroup(pending.name)
+        viewModelScope.launch {
+            _state.update { it.copy(deleting = true, banner = null) }
+            when (val result = container.api().deleteGroup(session, group)) {
+                is ApiResult.Ok -> _state.update { state ->
+                    state.copy(
+                        deleting = false,
+                        pendingGroup = null,
+                        notice = "已刪除「${pending.name}」入面 ${result.value} 個項目",
+                        detail = if (state.detail != null && canonicalGroup(state.detail.group) == group) null else state.detail,
+                        pendingDelete = state.pendingDelete?.takeUnless { canonicalGroup(it.group) == group },
+                        items = state.items?.filterNot { row -> canonicalGroup(row.group) == group },
+                    )
+                }
+                is ApiResult.Err -> {
+                    if (result.error.status == 401) container.notifyUnauthorized()
+                    _state.update { it.copy(deleting = false, pendingGroup = null, banner = result.error.message) }
+                }
+            }
+        }
     }
 
     fun confirmDelete() {

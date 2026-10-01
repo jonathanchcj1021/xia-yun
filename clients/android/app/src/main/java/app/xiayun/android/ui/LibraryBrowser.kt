@@ -71,6 +71,7 @@ fun LibraryBrowser(
     updatingId: String?,
     onOpen: (CloudItem) -> Unit,
     onDelete: (CloudItem) -> Unit,
+    onDeleteGroup: (String, Int) -> Unit,
     onAddTag: (CloudItem, String) -> Unit,
     onRemoveTag: (CloudItem, String) -> Unit,
     onMove: (CloudItem, String?) -> Unit,
@@ -207,6 +208,7 @@ fun LibraryBrowser(
                 organized.shelves.forEach { shelf ->
                     if (organized.filtering && shelf.items.isEmpty()) return@forEach
                     val open = shelf.name !in collapsed
+                    val total = items.count { (canonicalGroup(it.group) ?: UNGROUPED_LABEL) == shelf.name }
                     item(key = "group-${shelf.name}") {
                         GroupHeader(
                             name = shelf.name,
@@ -215,6 +217,11 @@ fun LibraryBrowser(
                             muted = shelf.name == UNGROUPED_LABEL,
                             onToggle = {
                                 collapsed = if (open) collapsed + shelf.name else collapsed - shelf.name
+                            },
+                            onDelete = if (total > 0) {
+                                { onDeleteGroup(shelf.name, total) }
+                            } else {
+                                null
                             },
                         )
                     }
@@ -361,37 +368,49 @@ private fun GroupHeader(
     open: Boolean,
     muted: Boolean,
     onToggle: () -> Unit,
+    onDelete: (() -> Unit)?,
 ) {
     Row(
         Modifier
             .widthIn(max = 720.dp)
             .fillMaxWidth()
-            .padding(top = 8.dp, bottom = 2.dp)
-            .semantics { contentDescription = if (open) "收合$name，共$count 項" else "展開$name，共$count 項" }
-            .clickable(onClick = onToggle)
-            .padding(vertical = 8.dp),
+            .padding(top = 8.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            name,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.titleLarge,
-            color = if (muted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            count.toString(),
-            modifier = Modifier.padding(horizontal = 8.dp),
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Icon(
-            Icons.Filled.ExpandMore,
-            contentDescription = null,
-            modifier = Modifier.rotate(if (open) 0f else -90f),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Row(
+            Modifier
+                .weight(1f)
+                .semantics { contentDescription = if (open) "收合$name，共$count 項" else "展開$name，共$count 項" }
+                .clickable(onClick = onToggle)
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                name,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleLarge,
+                color = if (muted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                count.toString(),
+                modifier = Modifier.padding(horizontal = 8.dp),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Icon(
+                Icons.Filled.ExpandMore,
+                contentDescription = null,
+                modifier = Modifier.rotate(if (open) 0f else -90f),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (onDelete != null) {
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Filled.Delete, contentDescription = "刪除$name")
+            }
+        }
     }
 }
 

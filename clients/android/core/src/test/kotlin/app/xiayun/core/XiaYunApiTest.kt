@@ -282,6 +282,37 @@ class XiaYunApiTest {
     }
 
     @Test
+    fun deleteGroupSendsNameOrNull() = runBlocking {
+        val session = AuthSession(token = "tok")
+        server.enqueue(MockResponse().setBody("""{"deleted":3}"""))
+        server.enqueue(MockResponse().setBody("""{"deleted":2}"""))
+        server.enqueue(MockResponse().setResponseCode(405).setBody("""{"error":"Method Not Allowed"}"""))
+        server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":"尚未登入","code":"UNAUTHENTICATED"}"""))
+
+        val named = api().deleteGroup(session, " 工作 ") as ApiResult.Ok
+        assertEquals(3, named.value)
+        val ungrouped = api().deleteGroup(session, "") as ApiResult.Ok
+        assertEquals(2, ungrouped.value)
+        val missing = api().deleteGroup(session, "未分組") as ApiResult.Err
+        assertEquals("伺服器尚未提供整組刪除", missing.error.message)
+        val loggedOut = api().deleteGroup(session, null) as ApiResult.Err
+        assertEquals(401, loggedOut.error.status)
+        assertEquals("尚未登入", loggedOut.error.message)
+
+        val namedCall = server.takeRequest()
+        assertEquals("DELETE", namedCall.method)
+        assertEquals("/api/items", namedCall.path)
+        assertEquals("Bearer tok", namedCall.getHeader("Authorization"))
+        val namedBody = apiJson.parseToJsonElement(namedCall.body.readUtf8()).jsonObject
+        assertEquals("工作", namedBody.optString("group"))
+
+        val clearCall = server.takeRequest()
+        val clearBody = apiJson.parseToJsonElement(clearCall.body.readUtf8()).jsonObject
+        assertTrue(clearBody["group"] is kotlinx.serialization.json.JsonNull)
+        assertNull(clearBody["tags"])
+    }
+
+    @Test
     fun oversizedUploadAndBlankNoteNeverHitTheNetwork() = runBlocking {
         val session = AuthSession(token = "tok")
         val big = ByteArray(1) // replaced below

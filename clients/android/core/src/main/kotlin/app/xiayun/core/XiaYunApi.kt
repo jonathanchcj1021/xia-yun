@@ -11,8 +11,10 @@ import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import okhttp3.CookieJar
@@ -135,6 +137,23 @@ class XiaYunApi internal constructor(
         val builder = authed("/api/items/$id", session) ?: return badUrl()
         val raw = execute(builder.delete().build())
         return raw.map { }
+    }
+
+    suspend fun deleteGroup(session: AuthSession, group: String?): ApiResult<Int> {
+        val payload = buildJsonObject {
+            val cleaned = canonicalGroup(group)
+            if (cleaned == null) put("group", JsonNull) else put("group", cleaned)
+        }
+        val builder = authed("/api/items", session) ?: return badUrl()
+        val raw = execute(builder.delete(encode(payload).toRequestBody(JSON)).build())
+        if (raw is ApiResult.Err && raw.error.status == 405) {
+            return ApiResult.Err(raw.error.copy(message = "伺服器尚未提供整組刪除"))
+        }
+        return raw.decode { body ->
+            val value = apiJson.parseToJsonElement(body.text()).jsonObject["deleted"] as? JsonPrimitive
+                ?: error("missing deleted")
+            value.intOrNull ?: value.longOrNull?.toInt() ?: error("missing deleted")
+        }
     }
 
     suspend fun createNote(session: AuthSession, title: String, body: String): ApiResult<CloudItem> {
