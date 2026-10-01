@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "xia-yun",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "xia-yun"
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "xia-yun",
+      "database_id": "503392af-02cb-4fe6-b05d-bcee0aae7746"
+    }
+  ],
+  "vars": {
+    "WEBAUTHN_RP_ID": "xia-yun.jonathanchcj1021.workers.dev"
+  },
+  "r2_buckets": [
+    {
+      "binding": "BLOBS",
+      "bucket_name": "xia-yun"
+    }
+  ]
+}
