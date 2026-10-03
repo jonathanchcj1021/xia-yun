@@ -6,6 +6,23 @@ const nextConfig: NextConfig = {
   experimental: {
     proxyClientMaxBodySize: "32mb",
   },
+  async headers() {
+    return [
+      {
+        source: "/download/apk",
+        headers: [
+          {
+            key: "Content-Type",
+            value: "application/vnd.android.package-archive",
+          },
+          {
+            key: "Content-Disposition",
+            value: 'attachment; filename="xia-yun.apk"',
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;
