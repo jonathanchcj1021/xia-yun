@@ -14,11 +14,11 @@ export async function GET() {
       headers: { "Content-Type": "text/plain; charset=utf-8" },
     });
   }
-  const size = object.size;
-  return new Response(object.body, {
+  const bytes = new Uint8Array(await object.arrayBuffer());
+  return new Response(bytes, {
     headers: {
       "Content-Type": "application/vnd.android.package-archive",
-      "Content-Length": String(size),
+      "Content-Length": String(bytes.byteLength),
       "Content-Disposition": 'attachment; filename="xia-yun.apk"',
       "Cache-Control": "no-store",
     },
