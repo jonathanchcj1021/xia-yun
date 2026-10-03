@@ -3,6 +3,7 @@ name: CI/CD Pipeline
 on:
   pull_request:
     branches: [ dev ]
+    types: [opened, synchronize, reopened]
   push:
     branches: [ dev, prd ]
 
@@ -31,38 +32,12 @@ jobs:
       - name: 執行單元測試
         run: npm test --if-present
 
-  deploy-preview:
-    name: 部署至 Cloudflare (Dev/Preview 環境)
-    needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
-    runs-on: ubuntu-latest
-    steps:
-      - name: 簽出代碼 (Checkout)
-        uses: actions/checkout@v4
-
-      - name: 配置 Node.js 環境
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: 'npm'
-
-      - name: 安裝相依套件
-        run: npm ci
-
-      - name: 建置 OpenNext Worker
-        run: npm exec -- opennextjs-cloudflare build
-
-      - name: 部署到 Cloudflare Worker (Preview)
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy --env preview
-
   deploy-production:
     name: 部署至 Cloudflare (Production 正式環境)
     needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/prd'
+    if: |
+      (github.event_name == 'pull_request' && github.base_ref == 'dev') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/prd')
     runs-on: ubuntu-latest
     steps:
       - name: 簽出代碼 (Checkout)

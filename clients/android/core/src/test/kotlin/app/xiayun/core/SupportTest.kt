@@ -11,7 +11,7 @@ class SupportTest {
     @Test
     fun defaultBaseUrlIsTheLiveHttpsHost() {
         assertEquals(
-            "https://macro-important-port-dollar.trycloudflare.com",
+            "https://xia-yun.jonathanchcj1021.workers.dev",
             BaseUrls.DEFAULT,
         )
         assertFalse(BaseUrls.DEFAULT.endsWith("/"))

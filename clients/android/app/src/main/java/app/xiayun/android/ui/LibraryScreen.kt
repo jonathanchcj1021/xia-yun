@@ -73,6 +73,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.xiayun.core.ApiResult
 import app.xiayun.core.CloudItem
+import app.xiayun.core.LinkPreview
 import app.xiayun.core.UNGROUPED_LABEL
 import app.xiayun.core.Upload
 import app.xiayun.core.canonicalGroup
@@ -106,6 +107,7 @@ fun LibraryScreen(
     onClearBanner: () -> Unit,
     onBanner: (String) -> Unit,
     fetchContent: suspend (String, Boolean) -> ApiResult<ByteArray>,
+    previewLink: suspend (String) -> ApiResult<LinkPreview>,
     onSignOut: () -> Unit,
     onToggleBiometric: (enable: Boolean) -> Unit,
     onOpenServer: () -> Unit,
@@ -177,6 +179,7 @@ fun LibraryScreen(
             onMove = { onMove(detail, it) },
             onBanner = onBanner,
             fetchContent = fetchContent,
+            previewLink = previewLink,
         )
     } else {
         Scaffold(
@@ -316,6 +319,7 @@ fun LibraryScreen(
                     onRemoveTag = onRemoveTag,
                     onMove = onMove,
                     onClearBanner = onClearBanner,
+                    previewLink = previewLink,
                     modifier = Modifier.fillMaxSize().padding(padding),
                 )
             }
@@ -392,6 +396,8 @@ fun LibraryScreen(
                                 )
                             }
                         }
+                        Spacer(Modifier.height(8.dp))
+                        NoteLinkPreview(text = noteBody, load = previewLink)
                         if (noteCustom) {
                             Spacer(Modifier.height(8.dp))
                             OutlinedTextField(
@@ -487,6 +493,7 @@ private fun DetailScreen(
     onMove: (String?) -> Unit,
     onBanner: (String) -> Unit,
     fetchContent: suspend (String, Boolean) -> ApiResult<ByteArray>,
+    previewLink: suspend (String) -> ApiResult<LinkPreview>,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -648,6 +655,8 @@ private fun DetailScreen(
                         SelectionContainer {
                             Text(item.body.orEmpty(), style = MaterialTheme.typography.bodyLarge)
                         }
+                        Spacer(Modifier.height(12.dp))
+                        NoteLinkPreview(text = item.body.orEmpty(), load = previewLink)
                     }
                 }
                 else -> {

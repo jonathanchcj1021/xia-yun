@@ -36,6 +36,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { LinkPreviewCard } from "@/components/link-preview-card";
+import { chosenNoteGroup, NoteGroupField } from "@/components/note-group-field";
 import type { PublicUser } from "@/lib/types";
 
 type ItemType = "file" | "image" | "text";
@@ -152,6 +154,8 @@ export function LibraryApp({ user }: { user: PublicUser }) {
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteTitle, setNoteTitle] = useState("");
   const [noteBody, setNoteBody] = useState("");
+  const [noteGroup, setNoteGroup] = useState("");
+  const [noteGroupCustom, setNoteGroupCustom] = useState("");
   const [savingNote, setSavingNote] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Item | null>(null);
   const [pendingGroup, setPendingGroup] = useState<{
@@ -318,6 +322,7 @@ export function LibraryApp({ user }: { user: PublicUser }) {
           type: "text",
           title: noteTitle,
           body: noteBody,
+          group: chosenNoteGroup(noteGroup, noteGroupCustom),
         }),
       });
       if (response.status === 401) {
@@ -332,6 +337,8 @@ export function LibraryApp({ user }: { user: PublicUser }) {
       setNoteOpen(false);
       setNoteTitle("");
       setNoteBody("");
+      setNoteGroup("");
+      setNoteGroupCustom("");
       setSavingNote(false);
       await loadItems();
     } catch {
@@ -799,9 +806,12 @@ export function LibraryApp({ user }: { user: PublicUser }) {
                                   {timeFormat.format(new Date(item.createdAt))}
                                 </p>
                                 {item.type === "text" ? (
-                                  <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground">
-                                    {item.excerpt ?? "（沒有內文）"}
-                                  </p>
+                                  <>
+                                    <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground">
+                                      {item.excerpt ?? "（沒有內文）"}
+                                    </p>
+                                    <LinkPreviewCard text={item.excerpt ?? ""} />
+                                  </>
                                 ) : null}
                                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
                                   {item.tags.map((tag) => (
@@ -928,7 +938,15 @@ export function LibraryApp({ user }: { user: PublicUser }) {
                 onChange={(event) => setNoteBody(event.target.value)}
                 className="min-h-40 text-base md:text-sm"
               />
+              <LinkPreviewCard text={noteBody} />
             </div>
+            <NoteGroupField
+              groups={knownGroups}
+              selected={noteGroup}
+              custom={noteGroupCustom}
+              onSelected={setNoteGroup}
+              onCustom={setNoteGroupCustom}
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setNoteOpen(false)} disabled={savingNote}>
@@ -1041,9 +1059,12 @@ export function LibraryApp({ user }: { user: PublicUser }) {
               無法讀取這則筆記。
             </p>
           ) : (
-            <p className="max-h-[50vh] overflow-auto text-sm leading-7 whitespace-pre-wrap">
-              {reading?.body?.length ? reading.body : "（沒有內文）"}
-            </p>
+            <>
+              <p className="max-h-[50vh] overflow-auto text-sm leading-7 whitespace-pre-wrap">
+                {reading?.body?.length ? reading.body : "（沒有內文）"}
+              </p>
+              <LinkPreviewCard text={reading?.body ?? ""} />
+            </>
           )}
           <DialogFooter>
             {reading ? (

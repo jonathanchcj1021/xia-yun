@@ -58,6 +58,15 @@ data class CloudItem(
     val tags: List<String> = emptyList(),
 )
 
+@Serializable
+data class LinkPreview(
+    val url: String,
+    val title: String? = null,
+    val description: String? = null,
+    val image: String? = null,
+    val site: String = "",
+)
+
 data class ItemPatchResult(
     val item: CloudItem,
     val echoedGroup: Boolean,

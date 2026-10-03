@@ -7,7 +7,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 object BaseUrls {
-    const val DEFAULT = "https://macro-important-port-dollar.trycloudflare.com"
+    const val DEFAULT = "https://xia-yun.jonathanchcj1021.workers.dev"
 
     fun normalize(input: String): String? {
         val trimmed = input.trim().trimEnd('/')
