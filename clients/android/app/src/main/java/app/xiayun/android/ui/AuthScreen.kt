@@ -55,6 +55,7 @@ fun AuthScreen(
     var serverDraft by rememberSaveable { mutableStateOf(baseUrl) }
     var serverError by rememberSaveable { mutableStateOf<String?>(null) }
     val shown = formError ?: error
+    val copy = LocalAppCopy.current
 
     Column(
         modifier = Modifier
@@ -152,7 +153,7 @@ fun AuthScreen(
             Spacer(Modifier.height(16.dp))
             Button(
                 onClick = {
-                    val problem = validate(register, email, password, confirm, LocalAppCopy.current.passwordMismatch)
+                    val problem = validate(register, email, password, confirm, copy.passwordMismatch)
                     if (problem != null) {
                         formError = problem
                     } else if (register) {

@@ -115,6 +115,7 @@ fun LibraryScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val copy = LocalAppCopy.current
     var menu by remember { mutableStateOf(false) }
     var noteOpen by remember { mutableStateOf(false) }
     var editingId by remember { mutableStateOf<String?>(null) }
@@ -432,7 +433,7 @@ fun LibraryScreen(
                             TextButton(
                                 onClick = {
                                     if (noteTitle.isBlank()) {
-                                        noteError = LocalAppCopy.current.titleRequired
+                                        noteError = copy.titleRequired
                                     } else {
                                         noteError = null
                                         noteOpen = false
