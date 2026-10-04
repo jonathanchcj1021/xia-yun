@@ -17,7 +17,7 @@ sealed class ReadUpload {
 }
 
 fun ContentResolver.readUpload(uri: Uri, unreadable: String, unnamed: String): ReadUpload {
-    val name = queryDisplayName(uri)
+    val name = queryDisplayName(uri, unnamed)
     val mime = getType(uri) ?: "application/octet-stream"
     openFileDescriptor(uri, "r")?.use { descriptor ->
         val size = descriptor.statSize
@@ -50,7 +50,7 @@ fun ContentResolver.readUpload(uri: Uri, unreadable: String, unnamed: String): R
     )
 }
 
-private fun ContentResolver.queryDisplayName(uri: Uri): String {
+private fun ContentResolver.queryDisplayName(uri: Uri, unnamed: String): String {
     val projected = try {
         query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
             val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)

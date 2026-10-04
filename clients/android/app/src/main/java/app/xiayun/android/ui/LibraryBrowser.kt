@@ -156,7 +156,8 @@ fun LibraryBrowser(
                 }
             }
         }
-        if (tagFilter != null) {
+        val selectedTag = tagFilter
+        if (selectedTag != null) {
             item {
                 Surface(
                     modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth(),
@@ -167,7 +168,7 @@ fun LibraryBrowser(
                         Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(fill(copy.watchingTag, mapOf("tag" to tagFilter)), modifier = Modifier.weight(1f))
+                        Text(fill(copy.watchingTag, mapOf("tag" to selectedTag)), modifier = Modifier.weight(1f))
                         TextButton(onClick = {
                             tagFilter = null
                             filterMessage = copy.tagCleared

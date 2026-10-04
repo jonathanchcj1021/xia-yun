@@ -490,6 +490,7 @@ fun LibraryScreen(
 
 @Composable
 internal fun Banner(message: String, onClear: () -> Unit, modifier: Modifier = Modifier) {
+    val copy = LocalAppCopy.current
     Card(modifier.fillMaxWidth()) {
         Row(
             Modifier.padding(12.dp),
