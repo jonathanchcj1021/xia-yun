@@ -43,15 +43,16 @@ function page(locale: Locale) {
     main { width: min(100%, 28rem); padding: 2rem 1.25rem; }
     h1 { margin: 0.75rem 0 0.5rem; font-size: 2.25rem; letter-spacing: -0.03em; }
     .lead { margin: 0 0 1.25rem; line-height: 1.6; color: #7a685c; }
-    a.download {
+    .actions { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+    a.download, a.home {
       display: inline-block;
-      background: #8c3a2a;
-      color: #fff8f2;
       text-decoration: none;
       font-weight: 650;
       padding: 0.9rem 1.5rem;
       border-radius: 999px;
     }
+    a.download { background: #8c3a2a; color: #fff8f2; }
+    a.home { color: #3a2c24; border: 1px solid #8c3a2a; background: transparent; }
     p.hint { margin: 1.25rem 0 0; line-height: 1.6; color: #7a685c; }
     nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }
     a.lang {
@@ -70,7 +71,10 @@ function page(locale: Locale) {
     <nav aria-label="${escapeHtml(copy.langLabel)}">${links}</nav>
     <h1>${escapeHtml(copy.brand)}</h1>
     <p class="lead">${escapeHtml(copy.downloadLead)}</p>
-    <a class="download" href="/download/apk" download>${escapeHtml(copy.downloadAction)}</a>
+    <div class="actions">
+      <a class="download" href="/download/apk" download>${escapeHtml(copy.downloadAction)}</a>
+      <a class="home" href="/product">${escapeHtml(copy.backHome)}</a>
+    </div>
     <p class="hint">${escapeHtml(copy.downloadHint)}</p>
   </main>
 </body>
