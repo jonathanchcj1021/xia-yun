@@ -1,5 +1,6 @@
 package app.xiayun.android.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,6 +28,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -56,6 +58,7 @@ fun AuthScreen(
     var serverError by rememberSaveable { mutableStateOf<String?>(null) }
     val shown = formError ?: error
     val copy = LocalAppCopy.current
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -68,7 +71,11 @@ fun AuthScreen(
         Column(Modifier.widthIn(max = 480.dp)) {
             LanguageSwitcher()
             Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.clickable { openProductPage(context) },
+            ) {
                 Mark()
                 Text(LocalAppCopy.current.brand, style = MaterialTheme.typography.titleLarge)
             }
@@ -153,7 +160,7 @@ fun AuthScreen(
             Spacer(Modifier.height(16.dp))
             Button(
                 onClick = {
-                    val problem = validate(register, email, password, confirm, copy.passwordMismatch)
+                    val problem = validate(register, email, password, confirm, copy)
                     if (problem != null) {
                         formError = problem
                     } else if (register) {
@@ -167,8 +174,8 @@ fun AuthScreen(
             ) {
                 Text(
                     when {
-                        busy && register -> "建立中…"
-                        busy -> "登入中…"
+                        busy && register -> copy.creating
+                        busy -> copy.loggingIn
                         register -> LocalAppCopy.current.createAccount
                         else -> LocalAppCopy.current.login
                     },
@@ -178,12 +185,12 @@ fun AuthScreen(
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(
                     onClick = {
-                        if (email.isBlank()) formError = "請先輸入電子郵件" else onPasskey(email.trim())
+                        if (email.isBlank()) formError = copy.emailFirst else onPasskey(email.trim())
                     },
                     enabled = !busy && !passkeyBusy,
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                 ) {
-                    Text(if (passkeyBusy) "…" else LocalAppCopy.current.passkey)
+                    Text(if (passkeyBusy) copy.passkeyWaiting else copy.passkeyLogin)
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -192,7 +199,7 @@ fun AuthScreen(
                 serverError = null
                 serverOpen = true
             }) {
-                Text("伺服器位址")
+                Text(copy.server)
             }
             Text(
                 baseUrl,
@@ -200,7 +207,7 @@ fun AuthScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (fromLock) {
-                TextButton(onClick = onBackToLock) { Text("回到生物辨識") }
+                TextButton(onClick = onBackToLock) { Text(copy.backToBiometric) }
             }
         }
     }
@@ -208,11 +215,11 @@ fun AuthScreen(
     if (serverOpen) {
         AlertDialog(
             onDismissRequest = { serverOpen = false },
-            title = { Text("伺服器位址") },
+            title = { Text(copy.server) },
             text = {
                 Column {
                     Text(
-                        "一般安裝會連到預設伺服器。只有要改位址時才填這裡。",
+                        copy.serverHelp,
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Spacer(Modifier.height(12.dp))
@@ -224,7 +231,7 @@ fun AuthScreen(
                         },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        label = { Text("位址") },
+                        label = { Text(copy.address) },
                     )
                     if (serverError != null) {
                         Spacer(Modifier.height(8.dp))
@@ -236,10 +243,10 @@ fun AuthScreen(
                 TextButton(onClick = {
                     val problem = onSaveServer(serverDraft)
                     if (problem == null) serverOpen = false else serverError = problem
-                }) { Text("儲存") }
+                }) { Text(copy.save) }
             },
             dismissButton = {
-                TextButton(onClick = { serverOpen = false }) { Text("取消") }
+                TextButton(onClick = { serverOpen = false }) { Text(copy.cancel) }
             },
         )
     }
@@ -250,11 +257,11 @@ private fun validate(
     email: String,
     password: String,
     confirm: String,
-    mismatch: String,
+    copy: AppCopy,
 ): String? {
-    if (email.isBlank()) return "請先輸入電子郵件"
-    if (register && password.length < Limits.MIN_PASSWORD) return "密碼至少需要 8 個字元"
-    if (register && password != confirm) return mismatch
-    if (!register && password.isEmpty()) return "請輸入密碼"
+    if (email.isBlank()) return copy.emailFirst
+    if (register && password.length < Limits.MIN_PASSWORD) return copy.passwordShort
+    if (register && password != confirm) return copy.passwordMismatch
+    if (!register && password.isEmpty()) return copy.passwordRequired
     return null
 }

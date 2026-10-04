@@ -1,0 +1,12 @@
+[package]
+name = "javascriptcore-rs"
+version = "1.1.2"
+edition = "2021"
+license = "MIT"
+publish = false
+description = "Windows client does not link this Linux GTK crate."
+
+[features]
+default = []
+v2_28 = []
+v2_38 = []

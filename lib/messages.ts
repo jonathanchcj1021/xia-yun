@@ -71,6 +71,72 @@ export type Copy = {
   close: string;
   editNote: string;
   noteDialogLead: string;
+  openLibrary: string;
+  dropTitle: string;
+  dropHint: string;
+  chooseFile: string;
+  registerPasskey: string;
+  passkeyReady: string;
+  passkeyCancelled: string;
+  passkeyDuplicate: string;
+  passkeyOrigin: string;
+  passkeyFailed: string;
+  requestFailed: string;
+  uploadProgress: string;
+  uploadOne: string;
+  uploadFailed: string;
+  saveFailed: string;
+  deleteFailed: string;
+  deleteGroupFailed: string;
+  copyFailed: string;
+  updateFailed: string;
+  filterType: string;
+  filterSort: string;
+  tagPrefix: string;
+  clear: string;
+  loadingItems: string;
+  loadErrorTitle: string;
+  retry: string;
+  emptyTitle: string;
+  emptyBody: string;
+  noMatchTitle: string;
+  noMatchBody: string;
+  deleteGroup: string;
+  addTag: string;
+  moveToGroup: string;
+  copied: string;
+  copyAction: string;
+  view: string;
+  download: string;
+  remove: string;
+  deleteUngrouped: string;
+  deleteNamedGroup: string;
+  irreversible: string;
+  deleting: string;
+  deleteItemTitle: string;
+  deleteItemBody: string;
+  imageLead: string;
+  imageFailed: string;
+  notePrivate: string;
+  readingNote: string;
+  readNoteFailed: string;
+  addTagTitle: string;
+  addTagLead: string;
+  removeTag: string;
+  newTag: string;
+  add: string;
+  moveTitle: string;
+  moveLead: string;
+  groupName: string;
+  groupExample: string;
+  move: string;
+  newGroupPlaceholder: string;
+  sampleToken: string;
+  notFoundTitle: string;
+  notFoundBody: string;
+  backHome: string;
+  pageErrorTitle: string;
+  pageErrorBody: string;
 };
 
 const zhHant: Copy = {
@@ -144,6 +210,72 @@ const zhHant: Copy = {
   close: "關閉",
   editNote: "編輯筆記",
   noteDialogLead: "標題會顯示在清單裡。內文用 Markdown 編寫，旁邊是預覽。",
+  openLibrary: "進入書庫",
+  dropTitle: "把檔案拖到這裡",
+  dropHint: "點陣圖片會顯示預覽。單一檔案上限 32 MB。一次可以拖入多個檔案。",
+  chooseFile: "選擇檔案",
+  registerPasskey: "註冊通行密鑰",
+  passkeyReady: "通行密鑰已註冊。下次可以用它登入這個帳號。",
+  passkeyCancelled: "通行密鑰已取消，或這台裝置拒絕了要求。",
+  passkeyDuplicate: "這支通行密鑰已經註冊過。",
+  passkeyOrigin: "這個網址不能使用通行密鑰。請改用 localhost 或網域名稱。",
+  passkeyFailed: "通行密鑰沒有完成。",
+  requestFailed: "伺服器沒有完成這個請求",
+  uploadProgress: "正在上傳 {current}/{total}：{name}",
+  uploadOne: "正在上傳 {name}",
+  uploadFailed: "上傳時無法連線，請稍後再試",
+  saveFailed: "儲存筆記時無法連線",
+  deleteFailed: "刪除時無法連線",
+  deleteGroupFailed: "刪除分組時無法連線",
+  copyFailed: "無法複製這則筆記",
+  updateFailed: "無法更新這個項目",
+  filterType: "類型",
+  filterSort: "排序",
+  tagPrefix: "標籤",
+  clear: "清除",
+  loadingItems: "正在載入項目",
+  loadErrorTitle: "讀取項目時發生問題",
+  retry: "再試一次",
+  emptyTitle: "匣子還是空的",
+  emptyBody: "上傳一個檔案，或寫下第一則筆記。內容只會出現在這個帳號。",
+  noMatchTitle: "沒有符合的項目",
+  noMatchBody: "試著清掉搜尋、類型或標籤，項目還在這個帳號裡。",
+  deleteGroup: "刪除分組",
+  addTag: "標籤",
+  moveToGroup: "移到分組",
+  copied: "已複製",
+  copyAction: "複製",
+  view: "查看",
+  download: "下載",
+  remove: "刪除",
+  deleteUngrouped: "刪除未分組入面全部 {count} 個項目？",
+  deleteNamedGroup: "刪除「{name}」入面全部 {count} 個項目？",
+  irreversible: "這些項目會從你的帳號移除，無法復原。",
+  deleting: "刪除中…",
+  deleteItemTitle: "刪除這個項目？",
+  deleteItemBody: "「{name}」會從你的帳號移除，無法復原。",
+  imageLead: "圖片預覽。下載會取得原始檔案。",
+  imageFailed: "無法顯示這張圖片。你可以改為下載原檔。",
+  notePrivate: "這則筆記只存在你的帳號裡。",
+  readingNote: "正在讀取筆記",
+  readNoteFailed: "無法讀取這則筆記。",
+  addTagTitle: "加上標籤",
+  addTagLead: "點清單上的標籤可以篩選。這裡可以新增或拿掉。",
+  removeTag: "移除",
+  newTag: "新標籤",
+  add: "新增",
+  moveTitle: "移到分組",
+  moveLead: "空白或未分組會把項目放到最後一個區段。",
+  groupName: "分組名稱",
+  groupExample: "例如工作",
+  move: "移動",
+  newGroupPlaceholder: "輸入新分組，會蓋過上面的選擇",
+  sampleToken: "文字",
+  notFoundTitle: "找不到這個頁面",
+  notFoundBody: "這個網址沒有對應的頁面。回到匣雲首頁繼續。",
+  backHome: "回到首頁",
+  pageErrorTitle: "頁面暫時無法顯示",
+  pageErrorBody: "匣雲遇到沒有預期的問題。再試一次，或重新整理瀏覽器。",
 };
 
 const zhHans: Copy = {
@@ -214,6 +346,72 @@ const zhHans: Copy = {
   close: "关闭",
   editNote: "编辑笔记",
   noteDialogLead: "标题会显示在列表里。正文用 Markdown 编写，旁边是预览。",
+  openLibrary: "进入书库",
+  dropTitle: "把文件拖到这里",
+  dropHint: "点阵图片会显示预览。单个文件上限 32 MB。一次可以拖入多个文件。",
+  chooseFile: "选择文件",
+  registerPasskey: "注册通行密钥",
+  passkeyReady: "通行密钥已注册。下次可以用它登录这个账号。",
+  passkeyCancelled: "通行密钥已取消，或这台设备拒绝了请求。",
+  passkeyDuplicate: "这支通行密钥已经注册过。",
+  passkeyOrigin: "这个网址不能使用通行密钥。请改用 localhost 或域名。",
+  passkeyFailed: "通行密钥没有完成。",
+  requestFailed: "服务器没有完成这个请求",
+  uploadProgress: "正在上传 {current}/{total}：{name}",
+  uploadOne: "正在上传 {name}",
+  uploadFailed: "上传时无法连线，请稍后再试",
+  saveFailed: "保存笔记时无法连线",
+  deleteFailed: "删除时无法连线",
+  deleteGroupFailed: "删除分组时无法连线",
+  copyFailed: "无法复制这则笔记",
+  updateFailed: "无法更新这个项目",
+  filterType: "类型",
+  filterSort: "排序",
+  tagPrefix: "标签",
+  clear: "清除",
+  loadingItems: "正在加载项目",
+  loadErrorTitle: "读取项目时发生问题",
+  retry: "再试一次",
+  emptyTitle: "匣子还是空的",
+  emptyBody: "上传一个文件，或写下第一则笔记。内容只会出现在这个账号。",
+  noMatchTitle: "没有符合的项目",
+  noMatchBody: "试着清掉搜索、类型或标签，项目还在这个账号里。",
+  deleteGroup: "删除分组",
+  addTag: "标签",
+  moveToGroup: "移到分组",
+  copied: "已复制",
+  copyAction: "复制",
+  view: "查看",
+  download: "下载",
+  remove: "删除",
+  deleteUngrouped: "删除未分组里面全部 {count} 个项目？",
+  deleteNamedGroup: "删除「{name}」里面全部 {count} 个项目？",
+  irreversible: "这些项目会从你的账号移除，无法恢复。",
+  deleting: "删除中…",
+  deleteItemTitle: "删除这个项目？",
+  deleteItemBody: "「{name}」会从你的账号移除，无法恢复。",
+  imageLead: "图片预览。下载会取得原始文件。",
+  imageFailed: "无法显示这张图片。你可以改为下载原档。",
+  notePrivate: "这则笔记只存在你的账号里。",
+  readingNote: "正在读取笔记",
+  readNoteFailed: "无法读取这则笔记。",
+  addTagTitle: "加上标签",
+  addTagLead: "点列表上的标签可以筛选。这里可以新增或拿掉。",
+  removeTag: "移除",
+  newTag: "新标签",
+  add: "新增",
+  moveTitle: "移到分组",
+  moveLead: "空白或未分组会把项目放到最后一个区段。",
+  groupName: "分组名称",
+  groupExample: "例如工作",
+  move: "移动",
+  newGroupPlaceholder: "输入新分组，会盖过上面的选择",
+  sampleToken: "文字",
+  notFoundTitle: "找不到这个页面",
+  notFoundBody: "这个网址没有对应的页面。回到匣云首页继续。",
+  backHome: "回到首页",
+  pageErrorTitle: "页面暂时无法显示",
+  pageErrorBody: "匣云遇到没有预期的问题。再试一次，或重新整理浏览器。",
 };
 
 const en: Copy = {
@@ -287,6 +485,72 @@ const en: Copy = {
   close: "Close",
   editNote: "Edit note",
   noteDialogLead: "The title shows in the list. Write the body in Markdown and check the preview.",
+  openLibrary: "Open library",
+  dropTitle: "Drop files here",
+  dropHint: "Pictures show a preview. Each file can be up to 32 MB. You can drop more than one.",
+  chooseFile: "Choose a file",
+  registerPasskey: "Register a passkey",
+  passkeyReady: "Passkey registered. You can use it to log in next time.",
+  passkeyCancelled: "The passkey was cancelled, or this device refused the request.",
+  passkeyDuplicate: "This passkey is already registered.",
+  passkeyOrigin: "This address cannot use a passkey. Use localhost or a domain name.",
+  passkeyFailed: "The passkey did not finish.",
+  requestFailed: "The server did not finish this request",
+  uploadProgress: "Uploading {current}/{total}: {name}",
+  uploadOne: "Uploading {name}",
+  uploadFailed: "Could not connect while uploading. Try again later.",
+  saveFailed: "Could not connect while saving the note",
+  deleteFailed: "Could not connect while deleting",
+  deleteGroupFailed: "Could not connect while deleting the group",
+  copyFailed: "Could not copy this note",
+  updateFailed: "Could not update this item",
+  filterType: "Type",
+  filterSort: "Sort",
+  tagPrefix: "Tag",
+  clear: "Clear",
+  loadingItems: "Loading items",
+  loadErrorTitle: "Could not load your items",
+  retry: "Try again",
+  emptyTitle: "This box is empty",
+  emptyBody: "Upload a file or write a first note. It stays in this account.",
+  noMatchTitle: "Nothing matches",
+  noMatchBody: "Clear the search, type, or tag. The items are still in this account.",
+  deleteGroup: "Delete group",
+  addTag: "Tag",
+  moveToGroup: "Move to group",
+  copied: "Copied",
+  copyAction: "Copy",
+  view: "View",
+  download: "Download",
+  remove: "Delete",
+  deleteUngrouped: "Delete all {count} ungrouped items?",
+  deleteNamedGroup: "Delete all {count} items in “{name}”?",
+  irreversible: "These items leave your account and cannot be restored.",
+  deleting: "Deleting…",
+  deleteItemTitle: "Delete this item?",
+  deleteItemBody: "“{name}” leaves your account and cannot be restored.",
+  imageLead: "Picture preview. Download gets the original file.",
+  imageFailed: "This picture cannot be shown. You can download the original.",
+  notePrivate: "This note stays in your account.",
+  readingNote: "Loading the note",
+  readNoteFailed: "Could not read this note.",
+  addTagTitle: "Add a tag",
+  addTagLead: "Tags in the list can filter. Add or remove them here.",
+  removeTag: "Remove",
+  newTag: "New tag",
+  add: "Add",
+  moveTitle: "Move to a group",
+  moveLead: "Leave this blank to put the item in the ungrouped section.",
+  groupName: "Group name",
+  groupExample: "For example, Work",
+  move: "Move",
+  newGroupPlaceholder: "Type a new group. It overrides the choice above.",
+  sampleToken: "text",
+  notFoundTitle: "This page is not here",
+  notFoundBody: "This address does not match a page. Go back to the Xia Yun homepage.",
+  backHome: "Back to the homepage",
+  pageErrorTitle: "This page cannot be shown",
+  pageErrorBody: "Xia Yun hit an unexpected problem. Try again, or reload the browser.",
 };
 
 export const messages: Record<Locale, Copy> = {

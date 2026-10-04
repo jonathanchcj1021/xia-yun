@@ -31,10 +31,11 @@ fun LockScreen(
     ) {
         Mark(modifier = Modifier)
         Spacer(Modifier.height(16.dp))
-        Text("匣雲已鎖定", style = MaterialTheme.typography.headlineMedium)
+        val copy = LocalAppCopy.current
+        Text(copy.lockTitle, style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(8.dp))
         Text(
-            "用生物辨識開啟已儲存的工作階段。",
+            copy.lockBody,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -44,7 +45,7 @@ fun LockScreen(
             Text(error, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
         }
         Spacer(Modifier.height(24.dp))
-        Button(onClick = onUnlock) { Text("以生物辨識解鎖") }
-        TextButton(onClick = onPassword) { Text("改用密碼登入") }
+        Button(onClick = onUnlock) { Text(copy.unlock) }
+        TextButton(onClick = onPassword) { Text(copy.usePassword) }
     }
 }

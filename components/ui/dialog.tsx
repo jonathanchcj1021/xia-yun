@@ -6,6 +6,8 @@ import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
+import { useClientLocale } from "@/lib/client-locale"
+import { messages } from "@/lib/messages"
 
 function Dialog({
   ...props
@@ -55,6 +57,7 @@ function DialogContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
 }) {
+  const copy = messages[useClientLocale()]
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -76,7 +79,7 @@ function DialogContent({
             >
               <XIcon
               />
-              <span className="sr-only">關閉</span>
+              <span className="sr-only">{copy.close}</span>
             </Button>
           </DialogPrimitive.Close>
         )}

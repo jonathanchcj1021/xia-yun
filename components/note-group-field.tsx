@@ -12,6 +12,7 @@ export function NoteGroupField({
   groupLabel = "分組",
   newGroupLabel = "新分組名稱",
   ungroupedLabel = UNGROUPED,
+  placeholder = "輸入新分組，會蓋過上面的選擇",
 }: {
   groups: string[];
   selected: string;
@@ -21,6 +22,7 @@ export function NoteGroupField({
   groupLabel?: string;
   newGroupLabel?: string;
   ungroupedLabel?: string;
+  placeholder?: string;
 }) {
   return (
     <div className="flex flex-col gap-3">
@@ -48,7 +50,7 @@ export function NoteGroupField({
           onChange={(event) => onCustom(event.target.value)}
           className="h-11 text-base md:text-sm"
           maxLength={80}
-          placeholder="輸入新分組，會蓋過上面的選擇"
+          placeholder={placeholder}
         />
       </div>
     </div>

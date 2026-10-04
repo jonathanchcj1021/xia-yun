@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { startRegistration } from "@simplewebauthn/browser";
 import {
@@ -40,6 +41,7 @@ import { LinkPreviewCard } from "@/components/link-preview-card";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { MarkdownView } from "@/components/markdown-view";
 import { chosenNoteGroup, NoteGroupField } from "@/components/note-group-field";
+import { localizePhrase } from "@/lib/known-phrases";
 import type { Locale } from "@/lib/locale";
 import { messages } from "@/lib/messages";
 import type { PublicUser } from "@/lib/types";
@@ -65,18 +67,6 @@ type TypeFilter = "all" | ItemType;
 
 const UNGROUPED = "未分組";
 
-const typeLabel: Record<ItemType, string> = {
-  file: "檔案",
-  image: "圖片",
-  text: "筆記",
-};
-
-const timeFormat = new Intl.DateTimeFormat("zh-TW", {
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
 
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -136,18 +126,38 @@ function sectionMoment(sortMode: SortMode, list: Item[]) {
   return sortMode === "oldest" ? Math.min(...times) : Math.max(...times);
 }
 
-async function errorMessage(response: Response) {
+async function errorMessage(response: Response, fallback: string, locale: Locale) {
   try {
     const data = (await response.json()) as { error?: unknown };
-    if (typeof data.error === "string" && data.error) return data.error;
+    if (typeof data.error === "string" && data.error) return localizePhrase(data.error, locale);
   } catch {
     /* ignore */
   }
-  return "伺服器沒有完成這個請求";
+  return fallback;
+}
+
+function fill(template: string, values: Record<string, string | number>) {
+  return template.replace(/\{(\w+)\}/g, (_, key: string) => String(values[key] ?? ""));
 }
 
 export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale }) {
   const copy = messages[locale];
+  const timeFormat = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale === "en" ? "en" : locale, {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    [locale],
+  );
+  function labelFor(type: ItemType) {
+    if (type === "image") return copy.sampleImage;
+    if (type === "text") return copy.sampleNote;
+    return copy.sampleFile;
+  }
+
   const [items, setItems] = useState<Item[] | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -204,7 +214,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
         return;
       }
       if (!response.ok) {
-        setListError(await errorMessage(response));
+        setListError(await errorMessage(response, copy.requestFailed, locale));
         setItems([]);
         return;
       }
@@ -217,10 +227,10 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
         })),
       );
     } catch {
-      setListError("無法連線，請稍後再試");
+      setListError(copy.network);
       setItems([]);
     }
-  }, [goToLogin]);
+  }, [copy.network, copy.requestFailed, goToLogin, locale]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -242,7 +252,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
         return;
       }
       if (!optionsResponse.ok) {
-        setPasskeyNotice(await errorMessage(optionsResponse));
+        setPasskeyNotice(await errorMessage(optionsResponse, copy.requestFailed, locale));
         setPasskeyPending(false);
         return;
       }
@@ -254,22 +264,22 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
         body: JSON.stringify(attestation),
       });
       if (!verifyResponse.ok) {
-        setPasskeyNotice(await errorMessage(verifyResponse));
+        setPasskeyNotice(await errorMessage(verifyResponse, copy.requestFailed, locale));
         setPasskeyPending(false);
         return;
       }
-      setPasskeyNotice("通行密鑰已註冊。下次可以用它登入這個帳號。");
+      setPasskeyNotice(copy.passkeyReady);
       setPasskeyPending(false);
     } catch (caught) {
       const name = caught instanceof Error ? caught.name : "";
       setPasskeyNotice(
         name === "NotAllowedError"
-          ? "通行密鑰已取消，或這台裝置拒絕了要求。"
+          ? copy.passkeyCancelled
           : name === "InvalidStateError"
-            ? "這支通行密鑰已經註冊過。"
+            ? copy.passkeyDuplicate
             : name === "SecurityError"
-              ? "這個網址不能使用通行密鑰。請改用 localhost 或網域名稱。"
-              : "通行密鑰沒有完成。",
+              ? copy.passkeyOrigin
+              : copy.passkeyFailed,
       );
       setPasskeyPending(false);
     }
@@ -292,8 +302,8 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
       const file = files[index];
       setUploading(
         files.length > 1
-          ? `正在上傳 ${index + 1}/${files.length}：${file.name}`
-          : `正在上傳 ${file.name}`,
+          ? fill(copy.uploadProgress, { current: index + 1, total: files.length, name: file.name })
+          : fill(copy.uploadOne, { name: file.name }),
       );
       const form = new FormData();
       form.set("file", file);
@@ -304,11 +314,11 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
           return;
         }
         if (!response.ok) {
-          setActionError(await errorMessage(response));
+          setActionError(await errorMessage(response, copy.requestFailed, locale));
           break;
         }
       } catch {
-        setActionError("上傳時無法連線，請稍後再試");
+        setActionError(copy.uploadFailed);
         break;
       }
     }
@@ -345,7 +355,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
         return;
       }
       if (!response.ok) {
-        setActionError(await errorMessage(response));
+        setActionError(await errorMessage(response, copy.requestFailed, locale));
         setSavingNote(false);
         return;
       }
@@ -359,7 +369,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
       setSavingNote(false);
       await loadItems();
     } catch {
-      setActionError("儲存筆記時無法連線");
+      setActionError(copy.saveFailed);
       setSavingNote(false);
     }
   }
@@ -377,7 +387,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
         return;
       }
       if (!response.ok) {
-        setActionError(await errorMessage(response));
+        setActionError(await errorMessage(response, copy.requestFailed, locale));
         setDeleting(false);
         return;
       }
@@ -385,7 +395,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
       setDeleting(false);
       await loadItems();
     } catch {
-      setActionError("刪除時無法連線");
+      setActionError(copy.deleteFailed);
       setDeleting(false);
     }
   }
@@ -407,7 +417,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
         return;
       }
       if (!response.ok) {
-        setActionError(await errorMessage(response));
+        setActionError(await errorMessage(response, copy.requestFailed, locale));
         setDeleting(false);
         return;
       }
@@ -417,7 +427,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
       setDeleting(false);
       await loadItems();
     } catch {
-      setActionError("刪除分組時無法連線");
+      setActionError(copy.deleteGroupFailed);
       setDeleting(false);
     }
   }
@@ -431,13 +441,13 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
         return;
       }
       if (!response.ok) {
-        setActionError(await errorMessage(response));
+        setActionError(await errorMessage(response, copy.requestFailed, locale));
         return;
       }
       const data = (await response.json()) as { item: Item };
       const copied = await writeClipboard(noteCopyText(data.item.name, data.item.body ?? ""));
       if (!copied) {
-        setActionError("無法複製這則筆記");
+        setActionError(copy.copyFailed);
         return;
       }
       setCopiedId(item.id);
@@ -445,7 +455,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
         setCopiedId((current) => (current === item.id ? null : current));
       }, 2000);
     } catch {
-      setActionError("無法複製這則筆記");
+      setActionError(copy.copyFailed);
     }
   }
 
@@ -458,7 +468,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
         return;
       }
       if (!response.ok) {
-        setActionError(await errorMessage(response));
+        setActionError(await errorMessage(response, copy.requestFailed, locale));
         return;
       }
       const data = (await response.json()) as { item: Item };
@@ -499,7 +509,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
         return false;
       }
       if (!response.ok) {
-        setActionError(await errorMessage(response));
+        setActionError(await errorMessage(response, copy.requestFailed, locale));
         return false;
       }
       const data = (await response.json()) as { item: Item };
@@ -517,7 +527,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
       );
       return true;
     } catch {
-      setActionError("無法更新這個項目");
+      setActionError(copy.updateFailed);
       return false;
     } finally {
       setSavingMeta(false);
@@ -581,13 +591,13 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
     <div className="flex min-h-full flex-col">
       <header className="sticky top-0 z-20 border-b bg-background/90 backdrop-blur">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-center gap-3">
+          <Link href="/product" className="flex min-w-0 items-center gap-3">
             <Mark className="size-8 shrink-0 text-primary" />
             <div className="min-w-0">
               <p className="text-base font-semibold tracking-tight">{copy.brand}</p>
               <p className="truncate text-xs text-muted-foreground">{user.email}</p>
             </div>
-          </div>
+          </Link>
           <div className="flex flex-wrap items-center gap-2">
             <LanguageSwitcher locale={locale} />
             <Button
@@ -597,7 +607,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
               disabled={passkeyPending || loggingOut}
             >
               <Fingerprint />
-              {passkeyPending ? "等待裝置確認…" : "註冊通行密鑰"}
+              {passkeyPending ? copy.passkeyWaiting : copy.registerPasskey}
             </Button>
             <Button
               variant="outline"
@@ -640,11 +650,9 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
           >
             <div className="flex items-center gap-2 text-sm font-medium">
               <Upload className="size-4 text-primary" />
-              把檔案拖到這裡
+              {copy.dropTitle}
             </div>
-            <p className="text-sm leading-6 text-muted-foreground">
-              點陣圖片會顯示預覽。單一檔案上限 32 MB。一次可以拖入多個檔案。
-            </p>
+            <p className="text-sm leading-6 text-muted-foreground">{copy.dropHint}</p>
             <input
               ref={fileInputRef}
               type="file"
@@ -660,7 +668,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
               disabled={Boolean(uploading)}
               onClick={() => fileInputRef.current?.click()}
             >
-              選擇檔案
+              {copy.chooseFile}
             </Button>
           </div>
           <Card className="hidden sm:block lg:w-72">
@@ -701,7 +709,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
                 className="h-11 text-base md:text-sm"
               />
               <select
-                aria-label="類型"
+                aria-label={copy.filterType}
                 value={typeFilter}
                 onChange={(event) => setTypeFilter(event.target.value as TypeFilter)}
                 className="h-11 rounded-lg border border-input bg-background px-3 text-sm"
@@ -712,7 +720,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
                 <option value="text">{copy.sampleNote}</option>
               </select>
               <select
-                aria-label="排序"
+                aria-label={copy.filterSort}
                 value={sortMode}
                 onChange={(event) => setSortMode(event.target.value as SortMode)}
                 className="h-11 rounded-lg border border-input bg-background px-3 text-sm"
@@ -724,9 +732,9 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
             </div>
             {tagFilter ? (
               <div className="flex flex-wrap items-center gap-2 text-sm">
-                <span>標籤：{tagFilter}</span>
+                <span>{copy.tagPrefix}：{tagFilter}</span>
                 <Button variant="outline" size="sm" className="h-8" onClick={() => setTagFilter(null)}>
-                  清除
+                  {copy.clear}
                 </Button>
               </div>
             ) : null}
@@ -735,7 +743,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
 
         {items === null ? (
           <div className="grid gap-3" aria-busy="true">
-            <p className="sr-only">正在載入項目</p>
+            <p className="sr-only">{copy.loadingItems}</p>
             {[0, 1, 2].map((key) => (
               <div key={key} className="h-28 animate-pulse rounded-xl bg-muted" />
             ))}
@@ -745,24 +753,24 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
             role="alert"
             className="rounded-2xl border border-destructive/30 bg-destructive/10 px-5 py-6"
           >
-            <h2 className="text-base font-medium">讀取項目時發生問題</h2>
+            <h2 className="text-base font-medium">{copy.loadErrorTitle}</h2>
             <p className="mt-1 text-sm text-muted-foreground">{listError}</p>
             <Button className="mt-4 h-10" variant="outline" onClick={() => void loadItems()}>
-              再試一次
+              {copy.retry}
             </Button>
           </div>
         ) : items.length === 0 ? (
           <div className="rounded-2xl border border-dashed px-6 py-16 text-center">
-            <h2 className="text-lg font-medium">匣子還是空的</h2>
+            <h2 className="text-lg font-medium">{copy.emptyTitle}</h2>
             <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-              上傳一個檔案，或寫下第一則筆記。內容只會出現在這個帳號。
+              {copy.emptyBody}
             </p>
           </div>
         ) : sections.length === 0 ? (
           <div className="rounded-2xl border border-dashed px-6 py-16 text-center">
-            <h2 className="text-lg font-medium">沒有符合的項目</h2>
+            <h2 className="text-lg font-medium">{copy.noMatchTitle}</h2>
             <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-              試著清掉搜尋、類型或標籤，項目還在這個帳號裡。
+              {copy.noMatchBody}
             </p>
           </div>
         ) : (
@@ -783,7 +791,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
                       <ChevronDown
                         className={`size-4 shrink-0 text-muted-foreground transition-transform ${open ? "" : "-rotate-90"}`}
                       />
-                      <span className="truncate text-sm font-medium">{section.label}</span>
+                      <span className="truncate text-sm font-medium">{section.key === UNGROUPED ? copy.ungrouped : section.label}</span>
                       <span className="text-sm text-muted-foreground">{section.items.length}</span>
                     </button>
                     <Button
@@ -797,7 +805,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
                         setPendingGroup({ key: section.key, label: section.label, count });
                       }}
                     >
-                      刪除分組
+                      {copy.deleteGroup}
                     </Button>
                   </div>
                   {open ? (
@@ -815,7 +823,6 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
                                     setPreview(item);
                                   }}
                                 >
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
                                   <img
                                     src={`/api/items/${item.id}/content`}
                                     alt=""
@@ -836,16 +843,16 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
                                   <h2 className="truncate text-sm font-medium" title={item.name}>
                                     {item.name}
                                   </h2>
-                                  <Badge variant="secondary">{typeLabel[item.type]}</Badge>
+                                  <Badge variant="secondary">{labelFor(item.type)}</Badge>
                                 </div>
                                 <p className="mt-1 text-xs text-muted-foreground">
-                                  {typeLabel[item.type]} · {formatSize(item.size)} ·{" "}
+                                  {labelFor(item.type)} · {formatSize(item.size)} ·{" "}
                                   {timeFormat.format(new Date(item.createdAt))}
                                 </p>
                                 {item.type === "text" ? (
                                   <>
                                     <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground">
-                                      {item.excerpt ?? "（沒有內文）"}
+                                      {item.excerpt ?? copy.emptyNote}
                                     </p>
                                     <LinkPreviewCard text={item.excerpt ?? ""} />
                                   </>
@@ -870,7 +877,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
                                       setTagTarget(item);
                                     }}
                                   >
-                                    + 標籤
+                                    + {copy.addTag}
                                   </Button>
                                   <Button
                                     variant="ghost"
@@ -881,7 +888,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
                                       setGroupTarget(item);
                                     }}
                                   >
-                                    移到分組
+                                    {copy.moveToGroup}
                                   </Button>
                                 </div>
                                 <div className="mt-3 flex flex-wrap gap-2">
@@ -896,7 +903,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
                                       }}
                                     >
                                       <ImageIcon />
-                                      預覽
+                                      {copy.preview}
                                     </Button>
                                   ) : null}
                                   {item.type === "text" ? (
@@ -907,7 +914,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
                                         className="h-9"
                                         onClick={() => void copyNote(item)}
                                       >
-                                        {copiedId === item.id ? "已複製" : "複製"}
+                                        {copiedId === item.id ? copy.copied : copy.copyAction}
                                       </Button>
                                       <Button
                                         variant="outline"
@@ -925,14 +932,14 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
                                         onClick={() => void openNote(item)}
                                       >
                                         <FileText />
-                                        查看
+                                        {copy.view}
                                       </Button>
                                     </>
                                   ) : null}
                                   <Button variant="outline" size="sm" className="h-9" asChild>
                                     <a href={`/api/items/${item.id}/content?disposition=attachment`}>
                                       <Download />
-                                      下載
+                                      {copy.download}
                                     </a>
                                   </Button>
                                   <Button
@@ -942,7 +949,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
                                     onClick={() => setPendingDelete(item)}
                                   >
                                     <Trash2 />
-                                    刪除
+                                    {copy.remove}
                                   </Button>
                                 </div>
                               </div>
@@ -1001,6 +1008,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
               groupLabel={copy.group}
               newGroupLabel={copy.newGroup}
               ungroupedLabel={copy.ungrouped}
+              placeholder={copy.newGroupPlaceholder}
             />
           </div>
           <DialogFooter>
@@ -1019,17 +1027,20 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
           <DialogHeader>
             <DialogTitle>
               {pendingGroup?.key === UNGROUPED
-                ? `刪除未分組入面全部 ${pendingGroup.count} 個項目？`
-                : `刪除「${pendingGroup?.label}」入面全部 ${pendingGroup?.count} 個項目？`}
+                ? fill(copy.deleteUngrouped, { count: pendingGroup.count })
+                : fill(copy.deleteNamedGroup, {
+                    name: pendingGroup?.label ?? "",
+                    count: pendingGroup?.count ?? 0,
+                  })}
             </DialogTitle>
-            <DialogDescription>這些項目會從你的帳號移除，無法復原。</DialogDescription>
+            <DialogDescription>{copy.irreversible}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPendingGroup(null)} disabled={deleting}>
-              取消
+              {copy.cancel}
             </Button>
             <Button variant="destructive" onClick={() => void confirmGroupDelete()} disabled={deleting}>
-              {deleting ? "刪除中…" : "刪除分組"}
+              {deleting ? copy.deleting : copy.deleteGroup}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1038,17 +1049,17 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
       <Dialog open={Boolean(pendingDelete)} onOpenChange={(open) => !open && setPendingDelete(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>刪除這個項目？</DialogTitle>
+            <DialogTitle>{copy.deleteItemTitle}</DialogTitle>
             <DialogDescription>
-              「{pendingDelete?.name}」會從你的帳號移除，無法復原。
+              {fill(copy.deleteItemBody, { name: pendingDelete?.name ?? "" })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPendingDelete(null)} disabled={deleting}>
-              取消
+              {copy.cancel}
             </Button>
             <Button variant="destructive" onClick={() => void confirmDelete()} disabled={deleting}>
-              {deleting ? "刪除中…" : "刪除"}
+              {deleting ? copy.deleting : copy.remove}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1063,15 +1074,14 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
         <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle className="truncate">{preview?.name}</DialogTitle>
-            <DialogDescription>圖片預覽。下載會取得原始檔案。</DialogDescription>
+            <DialogDescription>{copy.imageLead}</DialogDescription>
           </DialogHeader>
           {preview ? (
             previewFailed ? (
               <p role="alert" className="text-sm text-destructive">
-                無法顯示這張圖片。你可以改為下載原檔。
+                {copy.imageFailed}
               </p>
             ) : (
-              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={`/api/items/${preview.id}/content`}
                 alt={preview.name}
@@ -1083,11 +1093,11 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
           <DialogFooter>
             {preview ? (
               <Button asChild variant="outline">
-                <a href={`/api/items/${preview.id}/content?disposition=attachment`}>下載</a>
+                <a href={`/api/items/${preview.id}/content?disposition=attachment`}>{copy.download}</a>
               </Button>
             ) : null}
             <Button variant="outline" onClick={() => setPreview(null)}>
-              關閉
+              {copy.close}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1102,16 +1112,16 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="truncate">{reading?.name}</DialogTitle>
-            <DialogDescription>這則筆記只存在你的帳號裡。</DialogDescription>
+            <DialogDescription>{copy.notePrivate}</DialogDescription>
           </DialogHeader>
           {readingState === "loading" ? (
             <p className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="size-4 animate-spin" />
-              正在讀取筆記
+              {copy.readingNote}
             </p>
           ) : readingState === "error" ? (
             <p role="alert" className="text-sm text-destructive">
-              無法讀取這則筆記。
+              {copy.readNoteFailed}
             </p>
           ) : (
             <>
@@ -1140,7 +1150,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
             ) : null}
             {reading ? (
               <Button asChild variant="outline">
-                <a href={`/api/items/${reading.id}/content?disposition=attachment`}>下載</a>
+                <a href={`/api/items/${reading.id}/content?disposition=attachment`}>{copy.download}</a>
               </Button>
             ) : null}
             <Button variant="outline" onClick={() => setReading(null)}>
@@ -1158,8 +1168,8 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>加上標籤</DialogTitle>
-            <DialogDescription>點清單上的標籤可以篩選。這裡可以新增或拿掉。</DialogDescription>
+            <DialogTitle>{copy.addTagTitle}</DialogTitle>
+            <DialogDescription>{copy.addTagLead}</DialogDescription>
           </DialogHeader>
           {tagTarget && tagTarget.tags.length > 0 ? (
             <div className="flex flex-wrap gap-2">
@@ -1178,13 +1188,13 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
                     });
                   }}
                 >
-                  {tag} · 移除
+                  {tag} · {copy.removeTag}
                 </Button>
               ))}
             </div>
           ) : null}
           <div className="flex flex-col gap-2">
-            <Label htmlFor="tag-draft">新標籤</Label>
+            <Label htmlFor="tag-draft">{copy.newTag}</Label>
             <Input
               id="tag-draft"
               value={tagDraft}
@@ -1195,7 +1205,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setTagTarget(null)} disabled={savingMeta}>
-              關閉
+              {copy.close}
             </Button>
             <Button
               disabled={savingMeta || !tagDraft.trim() || !tagTarget}
@@ -1209,7 +1219,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
                 });
               }}
             >
-              {savingMeta ? "儲存中…" : "新增"}
+              {savingMeta ? copy.saving : copy.add}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1223,8 +1233,8 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>移到分組</DialogTitle>
-            <DialogDescription>空白或未分組會把項目放到最後一個區段。</DialogDescription>
+            <DialogTitle>{copy.moveTitle}</DialogTitle>
+            <DialogDescription>{copy.moveLead}</DialogDescription>
           </DialogHeader>
           {knownGroups.length > 0 ? (
             <div className="flex flex-wrap gap-2">
@@ -1241,14 +1251,14 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
             </div>
           ) : null}
           <div className="flex flex-col gap-2">
-            <Label htmlFor="group-draft">分組名稱</Label>
+            <Label htmlFor="group-draft">{copy.groupName}</Label>
             <Input
               id="group-draft"
               value={groupDraft}
               onChange={(event) => setGroupDraft(event.target.value)}
               className="h-11 text-base md:text-sm"
               maxLength={80}
-              placeholder="例如工作"
+              placeholder={copy.groupExample}
             />
           </div>
           <DialogFooter>
@@ -1262,7 +1272,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
                 });
               }}
             >
-              未分組
+              {copy.ungrouped}
             </Button>
             <Button
               disabled={savingMeta || !groupTarget}
@@ -1273,7 +1283,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
                 });
               }}
             >
-              {savingMeta ? "儲存中…" : "移動"}
+              {savingMeta ? copy.saving : copy.move}
             </Button>
           </DialogFooter>
         </DialogContent>

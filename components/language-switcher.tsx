@@ -14,8 +14,6 @@ export function LanguageSwitcher({ locale }: { locale: Locale }) {
   };
 
   function choose(next: Locale) {
-    // The cookie jar is writable. The React compiler rule treats document as frozen.
-    // eslint-disable-next-line react-hooks/immutability
     document.cookie = localeCookie(next);
     router.refresh();
   }
