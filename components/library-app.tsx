@@ -41,6 +41,7 @@ import { LinkPreviewCard } from "@/components/link-preview-card";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { MarkdownView } from "@/components/markdown-view";
 import { chosenNoteGroup, NoteGroupField } from "@/components/note-group-field";
+import { localizePhrase } from "@/lib/known-phrases";
 import type { Locale } from "@/lib/locale";
 import { messages } from "@/lib/messages";
 import type { PublicUser } from "@/lib/types";
@@ -125,10 +126,10 @@ function sectionMoment(sortMode: SortMode, list: Item[]) {
   return sortMode === "oldest" ? Math.min(...times) : Math.max(...times);
 }
 
-async function errorMessage(response: Response, fallback: string) {
+async function errorMessage(response: Response, fallback: string, locale: Locale) {
   try {
     const data = (await response.json()) as { error?: unknown };
-    if (typeof data.error === "string" && data.error) return data.error;
+    if (typeof data.error === "string" && data.error) return localizePhrase(data.error, locale);
   } catch {
     /* ignore */
   }
@@ -213,7 +214,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
         return;
       }
       if (!response.ok) {
-        setListError(await errorMessage(response, copy.requestFailed));
+        setListError(await errorMessage(response, copy.requestFailed, locale));
         setItems([]);
         return;
       }
@@ -229,7 +230,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
       setListError(copy.network);
       setItems([]);
     }
-  }, [copy.network, copy.requestFailed, goToLogin]);
+  }, [copy.network, copy.requestFailed, goToLogin, locale]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -251,7 +252,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
         return;
       }
       if (!optionsResponse.ok) {
-        setPasskeyNotice(await errorMessage(optionsResponse, copy.requestFailed));
+        setPasskeyNotice(await errorMessage(optionsResponse, copy.requestFailed, locale));
         setPasskeyPending(false);
         return;
       }
@@ -263,7 +264,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
         body: JSON.stringify(attestation),
       });
       if (!verifyResponse.ok) {
-        setPasskeyNotice(await errorMessage(verifyResponse, copy.requestFailed));
+        setPasskeyNotice(await errorMessage(verifyResponse, copy.requestFailed, locale));
         setPasskeyPending(false);
         return;
       }
@@ -313,7 +314,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
           return;
         }
         if (!response.ok) {
-          setActionError(await errorMessage(response, copy.requestFailed));
+          setActionError(await errorMessage(response, copy.requestFailed, locale));
           break;
         }
       } catch {
@@ -354,7 +355,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
         return;
       }
       if (!response.ok) {
-        setActionError(await errorMessage(response, copy.requestFailed));
+        setActionError(await errorMessage(response, copy.requestFailed, locale));
         setSavingNote(false);
         return;
       }
@@ -386,7 +387,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
         return;
       }
       if (!response.ok) {
-        setActionError(await errorMessage(response, copy.requestFailed));
+        setActionError(await errorMessage(response, copy.requestFailed, locale));
         setDeleting(false);
         return;
       }
@@ -416,7 +417,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
         return;
       }
       if (!response.ok) {
-        setActionError(await errorMessage(response, copy.requestFailed));
+        setActionError(await errorMessage(response, copy.requestFailed, locale));
         setDeleting(false);
         return;
       }
@@ -440,7 +441,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
         return;
       }
       if (!response.ok) {
-        setActionError(await errorMessage(response, copy.requestFailed));
+        setActionError(await errorMessage(response, copy.requestFailed, locale));
         return;
       }
       const data = (await response.json()) as { item: Item };
@@ -467,7 +468,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
         return;
       }
       if (!response.ok) {
-        setActionError(await errorMessage(response, copy.requestFailed));
+        setActionError(await errorMessage(response, copy.requestFailed, locale));
         return;
       }
       const data = (await response.json()) as { item: Item };
@@ -508,7 +509,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
         return false;
       }
       if (!response.ok) {
-        setActionError(await errorMessage(response, copy.requestFailed));
+        setActionError(await errorMessage(response, copy.requestFailed, locale));
         return false;
       }
       const data = (await response.json()) as { item: Item };

@@ -9,6 +9,7 @@ import { Mark } from "@/components/mark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { localizePhrase } from "@/lib/known-phrases";
 import type { Locale } from "@/lib/locale";
 import { messages } from "@/lib/messages";
 
@@ -29,10 +30,10 @@ function useHydrated() {
   );
 }
 
-async function errorMessage(response: Response, fallback: string) {
+async function errorMessage(response: Response, fallback: string, locale: Locale) {
   try {
     const data = (await response.json()) as { error?: unknown };
-    if (typeof data.error === "string" && data.error) return data.error;
+    if (typeof data.error === "string" && data.error) return localizePhrase(data.error, locale);
   } catch {
     /* ignore malformed bodies */
   }
@@ -69,7 +70,7 @@ export function AuthForm({ mode, locale }: { mode: Mode; locale: Locale }) {
         },
       );
       if (!response.ok) {
-        setError(await errorMessage(response, copy.requestFailed));
+        setError(await errorMessage(response, copy.requestFailed, locale));
         setPending(false);
         return;
       }
@@ -95,7 +96,7 @@ export function AuthForm({ mode, locale }: { mode: Mode; locale: Locale }) {
         body: JSON.stringify({ email }),
       });
       if (!optionsResponse.ok) {
-        setError(await errorMessage(optionsResponse, copy.requestFailed));
+        setError(await errorMessage(optionsResponse, copy.requestFailed, locale));
         setPasskeyPending(false);
         return;
       }
@@ -107,7 +108,7 @@ export function AuthForm({ mode, locale }: { mode: Mode; locale: Locale }) {
         body: JSON.stringify({ email, response: assertion }),
       });
       if (!verifyResponse.ok) {
-        setError(await errorMessage(verifyResponse, copy.requestFailed));
+        setError(await errorMessage(verifyResponse, copy.requestFailed, locale));
         setPasskeyPending(false);
         return;
       }
