@@ -1,5 +1,7 @@
+import type { ReactNode } from "react";
 import type { Metadata, Viewport } from "next";
 import { Noto_Sans_TC } from "next/font/google";
+import { requestLocale } from "@/lib/request-locale";
 import "./globals.css";
 
 const noto = Noto_Sans_TC({
@@ -20,9 +22,10 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const locale = await requestLocale();
   return (
-    <html lang="zh-Hant" className={`${noto.variable} h-full antialiased`}>
+    <html lang={locale} className={`${noto.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

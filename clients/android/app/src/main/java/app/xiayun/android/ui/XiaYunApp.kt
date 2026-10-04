@@ -16,6 +16,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.xiayun.android.AppContainer
@@ -33,9 +35,19 @@ fun XiaYunApp(
     val appModel: AppViewModel = viewModel(factory = AppViewModel.factory(container))
     val state by appModel.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var lang by remember { mutableStateOf(readAppLang(context)) }
     var passkeyBusy by remember { mutableStateOf(false) }
     var serverFromLibrary by remember { mutableStateOf(false) }
 
+    CompositionLocalProvider(
+        LocalAppCopy provides copyFor(lang),
+        LocalAppLang provides lang,
+        LocalSetLang provides { next ->
+            writeAppLang(context, next)
+            lang = next
+        },
+    ) {
     BackHandler(enabled = state.fromLock && state.phase == Phase.SignedOut) {
         appModel.returnToLock()
     }
@@ -98,6 +110,7 @@ fun XiaYunApp(
                 onRefresh = libraryModel::refresh,
                 onUpload = libraryModel::upload,
                 onCreateNote = libraryModel::createNote,
+                onUpdateNote = libraryModel::updateNote,
                 onAddTag = libraryModel::addTag,
                 onRemoveTag = libraryModel::removeTag,
                 onMove = libraryModel::moveItem,
@@ -170,6 +183,7 @@ fun XiaYunApp(
         } else {
             LaunchedEffect(Unit) { appModel.dismissOffer() }
         }
+    }
     }
 }
 

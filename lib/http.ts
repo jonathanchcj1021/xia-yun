@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import type { ErrorCode } from "@/lib/constants";
+import { FieldCryptoError } from "@/lib/field-crypto";
+
+export function cryptoErrorResponse(error: unknown) {
+  if (!(error instanceof FieldCryptoError)) return null;
+  return jsonError(500, "UNAVAILABLE", "暫時無法處理內容");
+}
 
 export function jsonError(status: number, code: ErrorCode, error: string) {
   return NextResponse.json(

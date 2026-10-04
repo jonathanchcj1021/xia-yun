@@ -1,8 +1,8 @@
 import type { NextRequest } from "next/server";
-import { isRecord, jsonError, jsonOk, readJson } from "@/lib/http";
-import { deleteItem, getItem, updateItemMeta } from "@/lib/items";
+import { cryptoErrorResponse, isRecord, jsonError, jsonOk, readJson } from "@/lib/http";
+import { deleteItem, getItem, updateItemMeta, updateTextItem } from "@/lib/items";
 import { getCurrentUser } from "@/lib/users";
-import { isUuid, normalizeGroup, normalizeTags } from "@/lib/validators";
+import { isUuid, normalizeGroup, normalizeNoteBody, normalizeNoteTitle, normalizeTags } from "@/lib/validators";
 
 export const runtime = "nodejs";
 
@@ -13,9 +13,13 @@ export async function GET(_request: NextRequest, context: Context) {
   if (!user) return jsonError(401, "UNAUTHENTICATED", "尚未登入");
   const { id } = await context.params;
   if (!isUuid(id)) return jsonError(404, "NOT_FOUND", "找不到這個項目");
-  const item = await getItem(user.id, id);
-  if (!item) return jsonError(404, "NOT_FOUND", "找不到這個項目");
-  return jsonOk({ item });
+  try {
+    const item = await getItem(user.id, id);
+    if (!item) return jsonError(404, "NOT_FOUND", "找不到這個項目");
+    return jsonOk({ item });
+  } catch (error) {
+    return cryptoErrorResponse(error) ?? jsonError(500, "UNAVAILABLE", "暫時無法讀取內容");
+  }
 }
 
 export async function PATCH(request: NextRequest, context: Context) {
@@ -38,9 +42,31 @@ export async function PATCH(request: NextRequest, context: Context) {
     if ("error" in tags) return jsonError(400, "VALIDATION", tags.error ?? "標籤格式不正確");
     patch.tags = tags.tags;
   }
-  const item = await updateItemMeta(user.id, id, patch);
-  if (!item) return jsonError(404, "NOT_FOUND", "找不到這個項目");
-  return jsonOk({ item });
+  let textPatch: { title?: string; body?: string } | null = null;
+  if ("title" in parsed.value || "body" in parsed.value) {
+    textPatch = {};
+    if ("title" in parsed.value) {
+      const title = normalizeNoteTitle(parsed.value.title);
+      if ("error" in title) return jsonError(400, "VALIDATION", title.error ?? "請填寫筆記標題");
+      textPatch.title = title.title;
+    }
+    if ("body" in parsed.value) {
+      const body = normalizeNoteBody(parsed.value.body);
+      if ("error" in body) return jsonError(400, "VALIDATION", body.error ?? "筆記內文格式不正確");
+      textPatch.body = body.body;
+    }
+  }
+  try {
+    if (textPatch) {
+      const updated = await updateTextItem(user.id, id, textPatch);
+      if (!updated) return jsonError(404, "NOT_FOUND", "找不到這個項目");
+    }
+    const item = await updateItemMeta(user.id, id, patch);
+    if (!item) return jsonError(404, "NOT_FOUND", "找不到這個項目");
+    return jsonOk({ item });
+  } catch (error) {
+    return cryptoErrorResponse(error) ?? jsonError(500, "UNAVAILABLE", "暫時無法儲存內容");
+  }
 }
 
 export async function DELETE(_request: NextRequest, context: Context) {

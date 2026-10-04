@@ -9,24 +9,30 @@ export function NoteGroupField({
   custom,
   onSelected,
   onCustom,
+  groupLabel = "分組",
+  newGroupLabel = "新分組名稱",
+  ungroupedLabel = UNGROUPED,
 }: {
   groups: string[];
   selected: string;
   custom: string;
   onSelected: (value: string) => void;
   onCustom: (value: string) => void;
+  groupLabel?: string;
+  newGroupLabel?: string;
+  ungroupedLabel?: string;
 }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-2">
-        <Label htmlFor="note-group">分組</Label>
+        <Label htmlFor="note-group">{groupLabel}</Label>
         <select
           id="note-group"
           value={selected}
           onChange={(event) => onSelected(event.target.value)}
           className="h-11 rounded-lg border border-input bg-transparent px-3 text-base md:text-sm"
         >
-          <option value="">{UNGROUPED}</option>
+          <option value="">{ungroupedLabel}</option>
           {groups.map((name) => (
             <option key={name} value={name}>
               {name}
@@ -35,7 +41,7 @@ export function NoteGroupField({
         </select>
       </div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor="note-group-name">新分組名稱</Label>
+        <Label htmlFor="note-group-name">{newGroupLabel}</Label>
         <Input
           id="note-group-name"
           value={custom}

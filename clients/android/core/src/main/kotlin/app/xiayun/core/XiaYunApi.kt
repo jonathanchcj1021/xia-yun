@@ -187,6 +187,26 @@ class XiaYunApi internal constructor(
         return raw.decode { parseItem(it.text()) }
     }
 
+    suspend fun updateNote(session: AuthSession, id: String, title: String, body: String): ApiResult<CloudItem> {
+        val trimmed = title.trim()
+        if (trimmed.isEmpty()) {
+            return ApiResult.Err(ApiError(0, "VALIDATION", ClientMessages.NOTE_TITLE))
+        }
+        if (trimmed.length > Limits.MAX_NOTE_TITLE) {
+            return ApiResult.Err(ApiError(0, "VALIDATION", ClientMessages.NOTE_TITLE_LONG))
+        }
+        if (body.length > Limits.MAX_NOTE_BODY) {
+            return ApiResult.Err(ApiError(0, "VALIDATION", ClientMessages.NOTE_BODY_LONG))
+        }
+        val payload = buildJsonObject {
+            put("title", trimmed)
+            put("body", body)
+        }
+        val builder = authed("/api/items/$id", session) ?: return badUrl()
+        val raw = execute(builder.patch(encode(payload).toRequestBody(JSON)).build())
+        return raw.decode { parseItem(it.text()) }
+    }
+
     suspend fun upload(session: AuthSession, upload: Upload): ApiResult<CloudItem> {
         if (upload.bytes.size.toLong() > Limits.MAX_UPLOAD_BYTES) {
             return ApiResult.Err(ApiError(413, "PAYLOAD_TOO_LARGE", ClientMessages.TOO_LARGE))

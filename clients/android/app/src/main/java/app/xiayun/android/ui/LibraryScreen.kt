@@ -93,6 +93,7 @@ fun LibraryScreen(
     onRefresh: () -> Unit,
     onUpload: (List<Upload>) -> Unit,
     onCreateNote: (String, String, String?) -> Unit,
+    onUpdateNote: (String, String, String, String?) -> Unit,
     onAddTag: (CloudItem, String) -> Unit,
     onRemoveTag: (CloudItem, String) -> Unit,
     onMove: (CloudItem, String?) -> Unit,
@@ -114,8 +115,10 @@ fun LibraryScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val copy = LocalAppCopy.current
     var menu by remember { mutableStateOf(false) }
     var noteOpen by remember { mutableStateOf(false) }
+    var editingId by remember { mutableStateOf<String?>(null) }
     var noteTitle by remember { mutableStateOf("") }
     var noteBody by remember { mutableStateOf("") }
     var noteGroup by remember { mutableStateOf<String?>(null) }
@@ -180,6 +183,16 @@ fun LibraryScreen(
             onBanner = onBanner,
             fetchContent = fetchContent,
             previewLink = previewLink,
+            onEdit = {
+                editingId = detail.id
+                noteTitle = detail.name
+                noteBody = detail.body.orEmpty()
+                noteGroup = detail.group
+                noteCustom = false
+                noteCustomName = ""
+                noteError = null
+                noteOpen = true
+            },
         )
     } else {
         Scaffold(
@@ -190,7 +203,7 @@ fun LibraryScreen(
                 TopAppBar(
                     title = {
                         Column {
-                            Text("我的匣子")
+                            Text(LocalAppCopy.current.libraryTitle)
                             if (email.isNotBlank()) {
                                 Text(
                                     email,
@@ -201,6 +214,7 @@ fun LibraryScreen(
                         }
                     },
                     actions = {
+                        LanguageSwitcher()
                         IconButton(onClick = onRefresh) {
                             Icon(Icons.Filled.Refresh, contentDescription = "重新整理")
                         }
@@ -227,7 +241,7 @@ fun LibraryScreen(
                                 )
                             }
                             DropdownMenuItem(
-                                text = { Text("登出") },
+                                text = { Text(LocalAppCopy.current.logout) },
                                 onClick = {
                                     menu = false
                                     onSignOut()
@@ -276,6 +290,7 @@ fun LibraryScreen(
                         }
                         Button(
                             onClick = {
+                                editingId = null
                                 noteTitle = ""
                                 noteBody = ""
                                 noteGroup = null
@@ -288,7 +303,7 @@ fun LibraryScreen(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Icon(Icons.Filled.EditNote, contentDescription = null)
-                            Text("新增筆記", modifier = Modifier.padding(start = 6.dp))
+                            Text(LocalAppCopy.current.newNote, modifier = Modifier.padding(start = 6.dp))
                         }
                     }
                 }
@@ -348,22 +363,20 @@ fun LibraryScreen(
                             .verticalScroll(rememberScrollState())
                             .padding(20.dp),
                     ) {
-                        Text("新增筆記", style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            if (editingId == null) LocalAppCopy.current.newNote else LocalAppCopy.current.editNote,
+                            style = MaterialTheme.typography.titleLarge,
+                        )
                         Spacer(Modifier.height(12.dp))
                         OutlinedTextField(
                             value = noteTitle,
                             onValueChange = { noteTitle = it },
-                            label = { Text("標題") },
+                            label = { Text(LocalAppCopy.current.noteTitle) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                         )
                         Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = noteBody,
-                            onValueChange = { noteBody = it },
-                            label = { Text("內文") },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
-                        )
+                        MarkdownEditor(value = noteBody, onValueChange = { noteBody = it })
                         if (noteError != null) {
                             Spacer(Modifier.height(8.dp))
                             Text(noteError!!, color = MaterialTheme.colorScheme.error)
@@ -416,20 +429,22 @@ fun LibraryScreen(
                             TextButton(
                                 onClick = { noteOpen = false },
                                 enabled = !state.savingNote,
-                            ) { Text("取消") }
+                            ) { Text(LocalAppCopy.current.cancel) }
                             TextButton(
                                 onClick = {
                                     if (noteTitle.isBlank()) {
-                                        noteError = "請填寫筆記標題"
+                                        noteError = copy.titleRequired
                                     } else {
                                         noteError = null
                                         noteOpen = false
                                         val group = if (noteCustom) noteCustomName else noteGroup
-                                        onCreateNote(noteTitle, noteBody, group)
+                                        val id = editingId
+                                        if (id == null) onCreateNote(noteTitle, noteBody, group)
+                                        else onUpdateNote(id, noteTitle, noteBody, group)
                                     }
                                 },
                                 enabled = !state.savingNote,
-                            ) { Text("儲存") }
+                            ) { Text(LocalAppCopy.current.save) }
                         }
                     }
                 }
@@ -494,6 +509,7 @@ private fun DetailScreen(
     onBanner: (String) -> Unit,
     fetchContent: suspend (String, Boolean) -> ApiResult<ByteArray>,
     previewLink: suspend (String) -> ApiResult<LinkPreview>,
+    onEdit: () -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -653,10 +669,16 @@ private fun DetailScreen(
                         CircularProgressIndicator()
                     } else {
                         SelectionContainer {
-                            Text(item.body.orEmpty(), style = MaterialTheme.typography.bodyLarge)
+                            if (item.body.isNullOrBlank()) {
+                                Text(LocalAppCopy.current.emptyNote)
+                            } else {
+                                MarkdownPreview(item.body.orEmpty())
+                            }
                         }
                         Spacer(Modifier.height(12.dp))
                         NoteLinkPreview(text = item.body.orEmpty(), load = previewLink)
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(onClick = onEdit) { Text(LocalAppCopy.current.edit) }
                     }
                 }
                 else -> {
