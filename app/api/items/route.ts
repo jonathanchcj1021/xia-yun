@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { MAX_REQUEST_BYTES, MAX_UPLOAD_BYTES } from "@/lib/constants";
-import { jsonError, jsonOk, isRecord, readJson } from "@/lib/http";
+import { cryptoErrorResponse, jsonError, jsonOk, isRecord, readJson } from "@/lib/http";
 import { createBlobItem, createTextItem, deleteGroup, listItems } from "@/lib/items";
 import { getCurrentUser } from "@/lib/users";
 import {
@@ -18,7 +18,11 @@ export const runtime = "nodejs";
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return jsonError(401, "UNAUTHENTICATED", "尚未登入");
-  return jsonOk({ items: await listItems(user.id) });
+  try {
+    return jsonOk({ items: await listItems(user.id) });
+  } catch (error) {
+    return cryptoErrorResponse(error) ?? jsonError(500, "UNAVAILABLE", "暫時無法讀取內容");
+  }
 }
 
 export async function DELETE(request: NextRequest) {
@@ -70,8 +74,12 @@ async function createNote(request: NextRequest, userId: string) {
   }
   const meta = readOptionalMeta(parsed.value);
   if ("error" in meta) return jsonError(400, "VALIDATION", meta.error);
-  const item = await createTextItem(userId, title.title, body.body, meta);
-  return jsonOk({ item }, 201);
+  try {
+    const item = await createTextItem(userId, title.title, body.body, meta);
+    return jsonOk({ item }, 201);
+  } catch (error) {
+    return cryptoErrorResponse(error) ?? jsonError(500, "UNAVAILABLE", "暫時無法儲存內容");
+  }
 }
 
 function readOptionalMeta(value: Record<string, unknown>) {
@@ -142,16 +150,20 @@ async function createUpload(request: NextRequest, userId: string) {
   const meta = readUploadMeta(form);
   if ("error" in meta) return jsonError(400, "VALIDATION", meta.error);
   const bytes = Buffer.from(await uploaded.arrayBuffer());
-  const item = await createBlobItem({
-    userId,
-    type,
-    name,
-    mimeType,
-    bytes,
-    group: meta.group,
-    tags: meta.tags,
-  });
-  return jsonOk({ item }, 201);
+  try {
+    const item = await createBlobItem({
+      userId,
+      type,
+      name,
+      mimeType,
+      bytes,
+      group: meta.group,
+      tags: meta.tags,
+    });
+    return jsonOk({ item }, 201);
+  } catch (error) {
+    return cryptoErrorResponse(error) ?? jsonError(500, "UNAVAILABLE", "暫時無法儲存內容");
+  }
 }
 
 function readUploadMeta(form: FormData) {

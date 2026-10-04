@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { deleteBlob, execute, getBlob, putBlob, queryAll, queryOne } from "@/lib/db";
+import { decryptBytes, decryptText, encryptBytes, encryptText } from "@/lib/field-crypto";
 import type { ItemType } from "@/lib/constants";
 
 export type ItemRecord = {
@@ -52,7 +53,8 @@ function parseTags(value: string | null) {
   }
 }
 
-function toItem(row: ItemRow, includeBody: boolean): ItemRecord {
+async function toItem(row: ItemRow, includeBody: boolean): Promise<ItemRecord> {
+  const plain = row.type === "text" && row.body != null ? await decryptText(row.body) : row.body;
   return {
     id: row.id,
     ownerId: row.user_id,
@@ -61,8 +63,8 @@ function toItem(row: ItemRow, includeBody: boolean): ItemRecord {
     size: Number(row.size),
     mimeType: row.mime_type,
     createdAt: new Date(Number(row.created_at)).toISOString(),
-    excerpt: row.type === "text" ? excerptOf(row.body) : null,
-    body: includeBody && row.type === "text" ? (row.body ?? "") : null,
+    excerpt: row.type === "text" ? excerptOf(plain) : null,
+    body: includeBody && row.type === "text" ? (plain ?? "") : null,
     group: row.item_group?.trim() ? row.item_group : null,
     tags: parseTags(row.tags),
   };
@@ -77,7 +79,7 @@ export async function listItems(userId: string) {
      ORDER BY created_at DESC`,
     userId,
   );
-  return rows.map((row) => toItem(row, false));
+  return Promise.all(rows.map((row) => toItem(row, false)));
 }
 
 export async function getItem(userId: string, itemId: string) {
@@ -99,6 +101,7 @@ export async function createTextItem(
   const id = randomUUID();
   const now = Date.now();
   const size = Buffer.byteLength(body, "utf8");
+  const stored = await encryptText(body);
   await execute(
     `INSERT INTO items
       (id, user_id, type, name, size, mime_type, body, created_at, item_group, tags)
@@ -107,7 +110,7 @@ export async function createTextItem(
     userId,
     title,
     size,
-    body,
+    stored,
     now,
     meta.group ?? null,
     JSON.stringify(meta.tags ?? []),
@@ -128,7 +131,8 @@ export async function createBlobItem(input: {
 }) {
   const id = randomUUID();
   const now = Date.now();
-  await putBlob(input.userId, id, input.bytes, input.mimeType);
+  const stored = await encryptBytes(input.bytes);
+  await putBlob(input.userId, id, stored, input.mimeType);
   try {
     await execute(
       `INSERT INTO items
@@ -168,6 +172,30 @@ export async function updateItemMeta(userId: string, itemId: string, patch: Item
     await execute(
       "UPDATE items SET tags = ? WHERE id = ? AND user_id = ?",
       JSON.stringify(patch.tags),
+      itemId,
+      userId,
+    );
+  }
+  return getItem(userId, itemId);
+}
+
+export async function updateTextItem(
+  userId: string,
+  itemId: string,
+  patch: { title?: string; body?: string },
+) {
+  const existing = await getItem(userId, itemId);
+  if (!existing || existing.type !== "text") return null;
+  if (patch.title !== undefined) {
+    await execute("UPDATE items SET name = ? WHERE id = ? AND user_id = ?", patch.title, itemId, userId);
+  }
+  if (patch.body !== undefined) {
+    const stored = await encryptText(patch.body);
+    const size = Buffer.byteLength(patch.body, "utf8");
+    await execute(
+      "UPDATE items SET body = ?, size = ? WHERE id = ? AND user_id = ?",
+      stored,
+      size,
       itemId,
       userId,
     );
@@ -217,5 +245,5 @@ export async function deleteItem(userId: string, itemId: string) {
 export async function readBlob(userId: string, itemId: string) {
   const bytes = await getBlob(userId, itemId);
   if (!bytes) throw new Error("找不到檔案內容");
-  return Buffer.from(bytes);
+  return Buffer.from(await decryptBytes(bytes));
 }

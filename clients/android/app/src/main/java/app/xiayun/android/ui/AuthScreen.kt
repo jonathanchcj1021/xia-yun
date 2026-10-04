@@ -65,22 +65,20 @@ fun AuthScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Column(Modifier.widthIn(max = 480.dp)) {
+            LanguageSwitcher()
+            Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Mark()
-                Text("匣雲", style = MaterialTheme.typography.titleLarge)
+                Text(LocalAppCopy.current.brand, style = MaterialTheme.typography.titleLarge)
             }
             Spacer(Modifier.height(28.dp))
             Text(
-                if (register) "建立匣雲帳號" else "登入匣雲",
+                if (register) LocalAppCopy.current.registerTitle else LocalAppCopy.current.loginTitle,
                 style = MaterialTheme.typography.headlineMedium,
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                if (register) {
-                    "密碼至少 8 個字元。這個帳號之後也可以在瀏覽器登入。"
-                } else {
-                    "檔案、圖片與筆記，只留在這個帳號。"
-                },
+                if (register) LocalAppCopy.current.registerLead else LocalAppCopy.current.loginLead,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -92,7 +90,7 @@ fun AuthScreen(
                         register = false
                         formError = null
                     },
-                    label = { Text("登入") },
+                    label = { Text(LocalAppCopy.current.login) },
                 )
                 FilterChip(
                     selected = register,
@@ -100,7 +98,7 @@ fun AuthScreen(
                         register = true
                         formError = null
                     },
-                    label = { Text("註冊") },
+                    label = { Text(LocalAppCopy.current.createAccount) },
                 )
             }
             Spacer(Modifier.height(16.dp))
@@ -111,7 +109,7 @@ fun AuthScreen(
                     formError = null
                 },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("電子郵件") },
+                label = { Text(LocalAppCopy.current.email) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
             )
@@ -123,7 +121,7 @@ fun AuthScreen(
                     formError = null
                 },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("密碼") },
+                label = { Text(LocalAppCopy.current.password) },
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
@@ -137,7 +135,7 @@ fun AuthScreen(
                         formError = null
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("再輸入一次密碼") },
+                    label = { Text(LocalAppCopy.current.confirmPassword) },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -154,7 +152,7 @@ fun AuthScreen(
             Spacer(Modifier.height(16.dp))
             Button(
                 onClick = {
-                    val problem = validate(register, email, password, confirm)
+                    val problem = validate(register, email, password, confirm, LocalAppCopy.current.passwordMismatch)
                     if (problem != null) {
                         formError = problem
                     } else if (register) {
@@ -170,8 +168,8 @@ fun AuthScreen(
                     when {
                         busy && register -> "建立中…"
                         busy -> "登入中…"
-                        register -> "建立帳號"
-                        else -> "登入"
+                        register -> LocalAppCopy.current.createAccount
+                        else -> LocalAppCopy.current.login
                     },
                 )
             }
@@ -184,7 +182,7 @@ fun AuthScreen(
                     enabled = !busy && !passkeyBusy,
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                 ) {
-                    Text(if (passkeyBusy) "等待裝置確認…" else "用通行密鑰登入")
+                    Text(if (passkeyBusy) "…" else LocalAppCopy.current.passkey)
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -246,10 +244,16 @@ fun AuthScreen(
     }
 }
 
-private fun validate(register: Boolean, email: String, password: String, confirm: String): String? {
+private fun validate(
+    register: Boolean,
+    email: String,
+    password: String,
+    confirm: String,
+    mismatch: String,
+): String? {
     if (email.isBlank()) return "請先輸入電子郵件"
     if (register && password.length < Limits.MIN_PASSWORD) return "密碼至少需要 8 個字元"
-    if (register && password != confirm) return "兩次輸入的密碼不一樣"
+    if (register && password != confirm) return mismatch
     if (!register && password.isEmpty()) return "請輸入密碼"
     return null
 }

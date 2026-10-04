@@ -35,9 +35,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { LanguageSwitcher } from "@/components/language-switcher";
 import { LinkPreviewCard } from "@/components/link-preview-card";
+import { MarkdownEditor } from "@/components/markdown-editor";
+import { MarkdownView } from "@/components/markdown-view";
 import { chosenNoteGroup, NoteGroupField } from "@/components/note-group-field";
+import type { Locale } from "@/lib/locale";
+import { messages } from "@/lib/messages";
 import type { PublicUser } from "@/lib/types";
 
 type ItemType = "file" | "image" | "text";
@@ -142,7 +146,8 @@ async function errorMessage(response: Response) {
   return "伺服器沒有完成這個請求";
 }
 
-export function LibraryApp({ user }: { user: PublicUser }) {
+export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale }) {
+  const copy = messages[locale];
   const [items, setItems] = useState<Item[] | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -152,6 +157,7 @@ export function LibraryApp({ user }: { user: PublicUser }) {
   const [passkeyPending, setPasskeyPending] = useState(false);
   const [passkeyNotice, setPasskeyNotice] = useState<string | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [noteTitle, setNoteTitle] = useState("");
   const [noteBody, setNoteBody] = useState("");
   const [noteGroup, setNoteGroup] = useState("");
@@ -311,19 +317,28 @@ export function LibraryApp({ user }: { user: PublicUser }) {
     await loadItems();
   }
 
+  function openComposer(item?: Item) {
+    setEditingId(item?.id ?? null);
+    setNoteTitle(item?.name ?? "");
+    setNoteBody(item?.body ?? "");
+    setNoteGroup(item?.group ?? "");
+    setNoteGroupCustom("");
+    setNoteOpen(true);
+  }
+
   async function saveNote() {
     setActionError(null);
     setSavingNote(true);
+    const payload = {
+      title: noteTitle,
+      body: noteBody,
+      group: chosenNoteGroup(noteGroup, noteGroupCustom),
+    };
     try {
-      const response = await fetch("/api/items", {
-        method: "POST",
+      const response = await fetch(editingId ? `/api/items/${editingId}` : "/api/items", {
+        method: editingId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "text",
-          title: noteTitle,
-          body: noteBody,
-          group: chosenNoteGroup(noteGroup, noteGroupCustom),
-        }),
+        body: JSON.stringify(editingId ? payload : { type: "text", ...payload }),
       });
       if (response.status === 401) {
         goToLogin();
@@ -335,10 +350,12 @@ export function LibraryApp({ user }: { user: PublicUser }) {
         return;
       }
       setNoteOpen(false);
+      setEditingId(null);
       setNoteTitle("");
       setNoteBody("");
       setNoteGroup("");
       setNoteGroupCustom("");
+      setReading(null);
       setSavingNote(false);
       await loadItems();
     } catch {
@@ -429,6 +446,25 @@ export function LibraryApp({ user }: { user: PublicUser }) {
       }, 2000);
     } catch {
       setActionError("無法複製這則筆記");
+    }
+  }
+
+  async function startEdit(item: Item) {
+    setActionError(null);
+    try {
+      const response = await fetch(`/api/items/${item.id}`);
+      if (response.status === 401) {
+        goToLogin();
+        return;
+      }
+      if (!response.ok) {
+        setActionError(await errorMessage(response));
+        return;
+      }
+      const data = (await response.json()) as { item: Item };
+      openComposer(data.item);
+    } catch {
+      setActionError(copy.network);
     }
   }
 
@@ -548,11 +584,12 @@ export function LibraryApp({ user }: { user: PublicUser }) {
           <div className="flex min-w-0 items-center gap-3">
             <Mark className="size-8 shrink-0 text-primary" />
             <div className="min-w-0">
-              <p className="text-base font-semibold tracking-tight">匣雲</p>
+              <p className="text-base font-semibold tracking-tight">{copy.brand}</p>
               <p className="truncate text-xs text-muted-foreground">{user.email}</p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <LanguageSwitcher locale={locale} />
             <Button
               variant="outline"
               className="h-10"
@@ -569,7 +606,7 @@ export function LibraryApp({ user }: { user: PublicUser }) {
               disabled={loggingOut || passkeyPending}
             >
               <LogOut />
-              {loggingOut ? "登出中…" : "登出"}
+              {copy.logout}
             </Button>
           </div>
         </div>
@@ -628,13 +665,13 @@ export function LibraryApp({ user }: { user: PublicUser }) {
           </div>
           <Card className="hidden sm:block lg:w-72">
             <CardHeader>
-              <CardTitle>寫一則筆記</CardTitle>
-              <CardDescription>標題與內文會存在這個帳號，不會變成公開頁面。</CardDescription>
+              <CardTitle>{copy.newNote}</CardTitle>
+              <CardDescription>{copy.libraryIntro}</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button className="h-10 w-full" onClick={() => setNoteOpen(true)}>
+              <Button className="h-10 w-full" onClick={() => openComposer()}>
                 <PenLine />
-                新增筆記
+                {copy.newNote}
               </Button>
             </CardContent>
           </Card>
@@ -659,8 +696,8 @@ export function LibraryApp({ user }: { user: PublicUser }) {
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="搜尋名稱或筆記"
-                aria-label="搜尋名稱或筆記"
+                placeholder={copy.search}
+                aria-label={copy.search}
                 className="h-11 text-base md:text-sm"
               />
               <select
@@ -669,10 +706,10 @@ export function LibraryApp({ user }: { user: PublicUser }) {
                 onChange={(event) => setTypeFilter(event.target.value as TypeFilter)}
                 className="h-11 rounded-lg border border-input bg-background px-3 text-sm"
               >
-                <option value="all">全部</option>
-                <option value="file">檔案</option>
-                <option value="image">圖片</option>
-                <option value="text">筆記</option>
+                <option value="all">{copy.allTypes}</option>
+                <option value="file">{copy.sampleFile}</option>
+                <option value="image">{copy.sampleImage}</option>
+                <option value="text">{copy.sampleNote}</option>
               </select>
               <select
                 aria-label="排序"
@@ -680,9 +717,9 @@ export function LibraryApp({ user }: { user: PublicUser }) {
                 onChange={(event) => setSortMode(event.target.value as SortMode)}
                 className="h-11 rounded-lg border border-input bg-background px-3 text-sm"
               >
-                <option value="newest">最新</option>
-                <option value="oldest">最舊</option>
-                <option value="name">名稱</option>
+                <option value="newest">{copy.newest}</option>
+                <option value="oldest">{copy.oldest}</option>
+                <option value="name">{copy.byName}</option>
               </select>
             </div>
             {tagFilter ? (
@@ -876,6 +913,15 @@ export function LibraryApp({ user }: { user: PublicUser }) {
                                         variant="outline"
                                         size="sm"
                                         className="h-9"
+                                        onClick={() => void startEdit(item)}
+                                      >
+                                        <PenLine />
+                                        {copy.edit}
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-9"
                                         onClick={() => void openNote(item)}
                                       >
                                         <FileText />
@@ -913,15 +959,21 @@ export function LibraryApp({ user }: { user: PublicUser }) {
         )}
       </main>
 
-      <Dialog open={noteOpen} onOpenChange={setNoteOpen}>
-        <DialogContent className="sm:max-w-lg">
+      <Dialog
+        open={noteOpen}
+        onOpenChange={(open) => {
+          setNoteOpen(open);
+          if (!open) setEditingId(null);
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>新增筆記</DialogTitle>
-            <DialogDescription>標題會顯示在清單裡，內文可以稍後再打開。</DialogDescription>
+            <DialogTitle>{editingId ? copy.editNote : copy.newNote}</DialogTitle>
+            <DialogDescription>{copy.noteDialogLead}</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="note-title">標題</Label>
+              <Label htmlFor="note-title">{copy.noteTitle}</Label>
               <Input
                 id="note-title"
                 value={noteTitle}
@@ -931,12 +983,12 @@ export function LibraryApp({ user }: { user: PublicUser }) {
               />
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="note-body">內文</Label>
-              <Textarea
-                id="note-body"
+              <Label htmlFor="note-body">{copy.noteBody}</Label>
+              <MarkdownEditor
+                labelledBy="note-body"
                 value={noteBody}
-                onChange={(event) => setNoteBody(event.target.value)}
-                className="min-h-40 text-base md:text-sm"
+                onChange={setNoteBody}
+                copy={copy}
               />
               <LinkPreviewCard text={noteBody} />
             </div>
@@ -946,14 +998,17 @@ export function LibraryApp({ user }: { user: PublicUser }) {
               custom={noteGroupCustom}
               onSelected={setNoteGroup}
               onCustom={setNoteGroupCustom}
+              groupLabel={copy.group}
+              newGroupLabel={copy.newGroup}
+              ungroupedLabel={copy.ungrouped}
             />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setNoteOpen(false)} disabled={savingNote}>
-              取消
+              {copy.cancel}
             </Button>
             <Button onClick={() => void saveNote()} disabled={savingNote}>
-              {savingNote ? "儲存中…" : "儲存筆記"}
+              {savingNote ? copy.saving : copy.saveNote}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1060,20 +1115,36 @@ export function LibraryApp({ user }: { user: PublicUser }) {
             </p>
           ) : (
             <>
-              <p className="max-h-[50vh] overflow-auto text-sm leading-7 whitespace-pre-wrap">
-                {reading?.body?.length ? reading.body : "（沒有內文）"}
-              </p>
+              <div className="max-h-[50vh] overflow-auto">
+                {reading?.body?.length ? (
+                  <MarkdownView source={reading.body} />
+                ) : (
+                  <p className="text-sm text-muted-foreground">{copy.emptyNote}</p>
+                )}
+              </div>
               <LinkPreviewCard text={reading?.body ?? ""} />
             </>
           )}
           <DialogFooter>
+            {reading && readingState === "ready" ? (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const current = reading;
+                  setReading(null);
+                  openComposer(current);
+                }}
+              >
+                {copy.edit}
+              </Button>
+            ) : null}
             {reading ? (
               <Button asChild variant="outline">
                 <a href={`/api/items/${reading.id}/content?disposition=attachment`}>下載</a>
               </Button>
             ) : null}
             <Button variant="outline" onClick={() => setReading(null)}>
-              關閉
+              {copy.close}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1209,9 +1280,9 @@ export function LibraryApp({ user }: { user: PublicUser }) {
       </Dialog>
 
       <div className="fixed inset-x-0 z-30 px-4 sm:hidden bottom-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <Button className="h-11 w-full shadow-md" onClick={() => setNoteOpen(true)}>
+        <Button className="h-11 w-full shadow-md" onClick={() => openComposer()}>
           <PenLine />
-          寫筆記
+          {copy.newNote}
         </Button>
       </div>
     </div>

@@ -4,10 +4,13 @@ import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { startAuthentication } from "@simplewebauthn/browser";
+import { LanguageSwitcher } from "@/components/language-switcher";
 import { Mark } from "@/components/mark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { Locale } from "@/lib/locale";
+import { messages } from "@/lib/messages";
 
 type Mode = "login" | "register";
 
@@ -42,7 +45,8 @@ async function errorMessage(response: Response) {
   return "伺服器沒有完成這個請求";
 }
 
-export function AuthForm({ mode }: { mode: Mode }) {
+export function AuthForm({ mode, locale }: { mode: Mode; locale: Locale }) {
+  const copy = messages[locale];
   const isRegister = mode === "register";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -57,7 +61,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
     event.preventDefault();
     setError(null);
     if (isRegister && password !== confirm) {
-      setError("兩次輸入的密碼不一樣");
+      setError(copy.passwordMismatch);
       return;
     }
     setPending(true);
@@ -78,7 +82,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
       router.refresh();
       router.push("/");
     } catch {
-      setError("無法連線，請稍後再試");
+      setError(copy.network);
       setPending(false);
     }
   }
@@ -86,7 +90,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
   async function loginWithPasskey() {
     setError(null);
     if (!email.trim()) {
-      setError("請先輸入電子郵件");
+      setError(copy.emailFirst);
       return;
     }
     setPasskeyPending(true);
@@ -124,21 +128,20 @@ export function AuthForm({ mode }: { mode: Mode }) {
   return (
     <div className="flex min-h-full flex-col">
       <header className="border-b bg-card/80">
-        <div className="mx-auto flex h-14 w-full max-w-5xl items-center px-4">
+        <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between px-4">
           <Link href="/" className="flex items-center gap-2">
             <Mark className="size-7 text-primary" />
-            <span className="text-base font-semibold tracking-tight">匣雲</span>
+            <span className="text-base font-semibold tracking-tight">{copy.brand}</span>
           </Link>
+          <LanguageSwitcher locale={locale} />
         </div>
       </header>
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-10">
         <h1 className="text-2xl font-semibold tracking-tight">
-          {isRegister ? "建立匣雲帳號" : "登入匣雲"}
+          {isRegister ? copy.registerTitle : copy.loginTitle}
         </h1>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          {isRegister
-            ? "用這個電子郵件在手機與電腦瀏覽器登入。密碼至少 8 個字元。"
-            : "輸入註冊時的電子郵件與密碼。登入狀態會留在這台裝置。"}
+          {isRegister ? copy.registerLead : copy.loginLead}
         </p>
         <form
           method="post"
@@ -147,7 +150,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
           noValidate
         >
           <div className="flex flex-col gap-2">
-            <Label htmlFor="email">電子郵件</Label>
+            <Label htmlFor="email">{copy.email}</Label>
             <Input
               id="email"
               type="email"
@@ -161,7 +164,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
             />
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="password">密碼</Label>
+            <Label htmlFor="password">{copy.password}</Label>
             <Input
               id="password"
               type="password"
@@ -175,7 +178,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
           </div>
           {isRegister ? (
             <div className="flex flex-col gap-2">
-              <Label htmlFor="confirm">再輸入一次密碼</Label>
+              <Label htmlFor="confirm">{copy.confirmPassword}</Label>
               <Input
                 id="confirm"
                 type="password"
@@ -198,11 +201,11 @@ export function AuthForm({ mode }: { mode: Mode }) {
           <Button type="submit" className="h-11" disabled={!ready || pending || passkeyPending}>
             {pending
               ? isRegister
-                ? "建立中…"
-                : "登入中…"
+                ? copy.creating
+                : copy.loggingIn
               : isRegister
-                ? "建立帳號"
-                : "登入"}
+                ? copy.submitRegister
+                : copy.submitLogin}
           </Button>
           {isRegister ? null : (
             <Button
@@ -212,23 +215,23 @@ export function AuthForm({ mode }: { mode: Mode }) {
               disabled={!ready || pending || passkeyPending}
               onClick={() => void loginWithPasskey()}
             >
-              {passkeyPending ? "等待裝置確認…" : "用通行密鑰登入"}
+              {passkeyPending ? copy.passkeyWaiting : copy.passkeyLogin}
             </Button>
           )}
         </form>
         <p className="mt-6 text-sm text-muted-foreground">
           {isRegister ? (
             <>
-              已經有帳號了？{" "}
+              {copy.haveAccount}{" "}
               <Link href="/login" className="font-medium text-foreground underline-offset-4 hover:underline">
-                登入
+                {copy.login}
               </Link>
             </>
           ) : (
             <>
-              還沒有帳號？{" "}
+              {copy.noAccount}{" "}
               <Link href="/register" className="font-medium text-foreground underline-offset-4 hover:underline">
-                建立帳號
+                {copy.createAccount}
               </Link>
             </>
           )}

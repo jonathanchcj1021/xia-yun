@@ -134,6 +134,41 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
+    fun updateNote(id: String, title: String, body: String, group: String?) {
+        val session = container.session.value ?: return
+        val target = when (val choice = groupChoice(group)) {
+            GroupChoice.Invalid -> return
+            is GroupChoice.Chosen -> choice.name
+        }
+        viewModelScope.launch {
+            _state.update { it.copy(savingNote = true, banner = null, notice = null) }
+            val updated = when (val result = container.api().updateNote(session, id, title, body)) {
+                is ApiResult.Ok -> result.value
+                is ApiResult.Err -> {
+                    if (result.error.status == 401) container.notifyUnauthorized()
+                    _state.update { it.copy(savingNote = false, banner = result.error.message) }
+                    return@launch
+                }
+            }
+            var failure: String? = null
+            if (target != updated.group) {
+                when (val patched = container.api().patchItem(session, id, group = target, setGroup = true)) {
+                    is ApiResult.Ok -> Unit
+                    is ApiResult.Err -> {
+                        if (patched.error.status == 401) {
+                            container.notifyUnauthorized()
+                            _state.update { it.copy(savingNote = false) }
+                            return@launch
+                        }
+                        failure = patched.error.message
+                    }
+                }
+            }
+            _state.update { it.copy(savingNote = false, banner = failure, detail = null) }
+            refresh()
+        }
+    }
+
     fun addTag(item: CloudItem, raw: String) {
         val value = normalizeTag(raw)
         if (value.isEmpty()) return
