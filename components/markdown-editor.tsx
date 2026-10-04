@@ -27,7 +27,7 @@ export function MarkdownEditor({
     }
     const start = node.selectionStart;
     const end = node.selectionEnd;
-    const selected = value.slice(start, end) || "文字";
+    const selected = value.slice(start, end) || copy.sampleToken;
     const next = `${value.slice(0, start)}${before}${selected}${after}${value.slice(end)}`;
     onChange(next);
     const cursor = start + before.length + selected.length + after.length;

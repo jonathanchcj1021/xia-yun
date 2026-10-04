@@ -13,3 +13,15 @@ lto = "thin"
 opt-level = 3
 panic = "abort"
 strip = true
+
+# webkit2gtk 2.0.2 pins glib 0.18, which is GHSA-wrw7-89jp-8q8g.
+# No 0.18 release contains the fix (it shipped in glib 0.20). These path
+# crates keep the same versions Tauri asks for, without depending on glib.
+# The Windows shell uses WebView2 and does not compile this Linux stack.
+[patch.crates-io]
+gdkx11 = { path = "third-party/gdkx11" }
+gtk = { path = "third-party/gtk" }
+javascriptcore-rs = { path = "third-party/javascriptcore-rs" }
+libappindicator = { path = "third-party/libappindicator" }
+soup3 = { path = "third-party/soup3" }
+webkit2gtk = { path = "third-party/webkit2gtk" }

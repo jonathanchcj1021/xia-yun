@@ -35,6 +35,7 @@ data class AppUiState(
 )
 
 class AppViewModel(private val container: AppContainer) : ViewModel() {
+    private fun t() = copyFor(parseAppLang(container.langCode()))
     private val _state = MutableStateFlow(
         AppUiState(
             baseUrl = container.baseUrl(),
@@ -144,7 +145,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun updateBaseUrl(raw: String): String? {
-        val normalized = BaseUrls.normalize(raw) ?: return "伺服器位址不正確"
+        val normalized = BaseUrls.normalize(raw) ?: return t().badServer
         container.setBaseUrl(normalized)
         _state.update { it.copy(baseUrl = normalized) }
         return null
@@ -238,7 +239,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 biometricEnabled = false,
                 offerBiometric = false,
                 busy = false,
-                error = "工作階段已失效，請重新登入",
+                error = t().sessionExpired,
             )
         }
     }

@@ -14,17 +14,11 @@ import { messages } from "@/lib/messages";
 
 type Mode = "login" | "register";
 
-function passkeyBrowserMessage(error: unknown) {
-  if (error instanceof Error && error.name === "NotAllowedError") {
-    return "通行密鑰已取消，或這台裝置拒絕了要求。";
-  }
-  if (error instanceof Error && error.name === "InvalidStateError") {
-    return "這支通行密鑰已經註冊過。";
-  }
-  if (error instanceof Error && error.name === "SecurityError") {
-    return "這個網址不能使用通行密鑰。請改用 localhost 或網域名稱。";
-  }
-  return "通行密鑰沒有完成。";
+function passkeyBrowserMessage(error: unknown, copy: (typeof messages)["zh-Hant"]) {
+  if (error instanceof Error && error.name === "NotAllowedError") return copy.passkeyCancelled;
+  if (error instanceof Error && error.name === "InvalidStateError") return copy.passkeyDuplicate;
+  if (error instanceof Error && error.name === "SecurityError") return copy.passkeyOrigin;
+  return copy.passkeyFailed;
 }
 
 function useHydrated() {
@@ -35,14 +29,14 @@ function useHydrated() {
   );
 }
 
-async function errorMessage(response: Response) {
+async function errorMessage(response: Response, fallback: string) {
   try {
     const data = (await response.json()) as { error?: unknown };
     if (typeof data.error === "string" && data.error) return data.error;
   } catch {
     /* ignore malformed bodies */
   }
-  return "伺服器沒有完成這個請求";
+  return fallback;
 }
 
 export function AuthForm({ mode, locale }: { mode: Mode; locale: Locale }) {
@@ -75,7 +69,7 @@ export function AuthForm({ mode, locale }: { mode: Mode; locale: Locale }) {
         },
       );
       if (!response.ok) {
-        setError(await errorMessage(response));
+        setError(await errorMessage(response, copy.requestFailed));
         setPending(false);
         return;
       }
@@ -101,7 +95,7 @@ export function AuthForm({ mode, locale }: { mode: Mode; locale: Locale }) {
         body: JSON.stringify({ email }),
       });
       if (!optionsResponse.ok) {
-        setError(await errorMessage(optionsResponse));
+        setError(await errorMessage(optionsResponse, copy.requestFailed));
         setPasskeyPending(false);
         return;
       }
@@ -113,14 +107,14 @@ export function AuthForm({ mode, locale }: { mode: Mode; locale: Locale }) {
         body: JSON.stringify({ email, response: assertion }),
       });
       if (!verifyResponse.ok) {
-        setError(await errorMessage(verifyResponse));
+        setError(await errorMessage(verifyResponse, copy.requestFailed));
         setPasskeyPending(false);
         return;
       }
       router.refresh();
       router.push("/");
     } catch (caught) {
-      setError(passkeyBrowserMessage(caught));
+      setError(passkeyBrowserMessage(caught, copy));
       setPasskeyPending(false);
     }
   }

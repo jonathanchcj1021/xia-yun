@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import type { Locale } from "@/lib/locale";
 import { messages } from "@/lib/messages";
 
-export function Welcome({ locale }: { locale: Locale }) {
+export function Welcome({ locale, signedIn = false }: { locale: Locale; signedIn?: boolean }) {
   const copy = messages[locale];
   const samples = [
     { label: copy.sampleFile, text: copy.sampleFileText },
@@ -32,12 +32,20 @@ export function Welcome({ locale }: { locale: Locale }) {
           </h1>
           <p className="mt-4 max-w-xl text-base leading-7 text-muted-foreground">{copy.lead}</p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Button asChild className="h-11 px-5">
-              <Link href="/register">{copy.createAccount}</Link>
-            </Button>
-            <Button asChild variant="outline" className="h-11 px-5">
-              <Link href="/login">{copy.login}</Link>
-            </Button>
+            {signedIn ? (
+              <Button asChild className="h-11 px-5">
+                <Link href="/">{copy.openLibrary}</Link>
+              </Button>
+            ) : (
+              <>
+                <Button asChild className="h-11 px-5">
+                  <Link href="/register">{copy.createAccount}</Link>
+                </Button>
+                <Button asChild variant="outline" className="h-11 px-5">
+                  <Link href="/login">{copy.login}</Link>
+                </Button>
+              </>
+            )}
             <Button asChild variant="outline" className="h-11 px-5">
               <Link href="/download">{copy.downloadApp}</Link>
             </Button>

@@ -16,7 +16,7 @@ sealed class ReadUpload {
     data class Failed(val message: String) : ReadUpload()
 }
 
-fun ContentResolver.readUpload(uri: Uri): ReadUpload {
+fun ContentResolver.readUpload(uri: Uri, unreadable: String, unnamed: String): ReadUpload {
     val name = queryDisplayName(uri)
     val mime = getType(uri) ?: "application/octet-stream"
     openFileDescriptor(uri, "r")?.use { descriptor ->
@@ -39,7 +39,7 @@ fun ContentResolver.readUpload(uri: Uri): ReadUpload {
         }
     } catch (_: Exception) {
         null
-    } ?: return ReadUpload.Failed("無法讀取這個檔案")
+    } ?: return ReadUpload.Failed(unreadable)
     return ReadUpload.Ok(
         Upload(
             filename = name,
@@ -59,7 +59,7 @@ private fun ContentResolver.queryDisplayName(uri: Uri): String {
     } catch (_: Exception) {
         null
     }
-    return sanitizeFileName(projected ?: uri.lastPathSegment ?: "未命名檔案")
+    return sanitizeFileName(projected ?: uri.lastPathSegment ?: unnamed)
 }
 
 fun decodeSampled(bytes: ByteArray, maxSide: Int): Bitmap? {

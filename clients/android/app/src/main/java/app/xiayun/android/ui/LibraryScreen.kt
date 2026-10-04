@@ -5,6 +5,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -80,7 +81,6 @@ import app.xiayun.core.canonicalGroup
 import app.xiayun.core.formatBytes
 import app.xiayun.core.formatCatalogDate
 import app.xiayun.core.libraryGroupNames
-import app.xiayun.core.typeLabel
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -130,10 +130,10 @@ fun LibraryScreen(
         scope.launch {
             val uploads = mutableListOf<Upload>()
             for (uri in uris) {
-                when (val read = context.contentResolver.readUpload(uri)) {
+                when (val read = context.contentResolver.readUpload(uri, copy.cannotRead, copy.unnamedFile)) {
                     is ReadUpload.Ok -> uploads += read.upload
                     ReadUpload.TooLarge -> {
-                        onBanner("檔案超過 32 MB 上限")
+                        onBanner(copy.tooLarge)
                         return@launch
                     }
                     is ReadUpload.Failed -> {
@@ -151,10 +151,10 @@ fun LibraryScreen(
         scope.launch {
             val uploads = mutableListOf<Upload>()
             for (uri in uris) {
-                when (val read = context.contentResolver.readUpload(uri)) {
+                when (val read = context.contentResolver.readUpload(uri, copy.cannotRead, copy.unnamedFile)) {
                     is ReadUpload.Ok -> uploads += read.upload
                     ReadUpload.TooLarge -> {
-                        onBanner("檔案超過 32 MB 上限")
+                        onBanner(copy.tooLarge)
                         return@launch
                     }
                     is ReadUpload.Failed -> {
@@ -202,8 +202,8 @@ fun LibraryScreen(
             topBar = {
                 TopAppBar(
                     title = {
-                        Column {
-                            Text(LocalAppCopy.current.libraryTitle)
+                        Column(Modifier.clickable { openProductPage(context) }) {
+                            Text(copy.brand)
                             if (email.isNotBlank()) {
                                 Text(
                                     email,
@@ -216,14 +216,21 @@ fun LibraryScreen(
                     actions = {
                         LanguageSwitcher()
                         IconButton(onClick = onRefresh) {
-                            Icon(Icons.Filled.Refresh, contentDescription = "重新整理")
+                            Icon(Icons.Filled.Refresh, contentDescription = copy.refresh)
                         }
                         IconButton(onClick = { menu = true }) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = "更多")
+                            Icon(Icons.Filled.MoreVert, contentDescription = copy.more)
                         }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                             DropdownMenuItem(
-                                text = { Text("伺服器位址") },
+                                text = { Text(copy.openProduct) },
+                                onClick = {
+                                    menu = false
+                                    openProductPage(context)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(copy.server) },
                                 onClick = {
                                     menu = false
                                     onOpenServer()
@@ -232,7 +239,7 @@ fun LibraryScreen(
                             if (biometricAvailable) {
                                 DropdownMenuItem(
                                     text = {
-                                        Text(if (biometricEnabled) "關閉生物辨識解鎖" else "啟用生物辨識解鎖")
+                                        Text(if (biometricEnabled) copy.biometricOff else copy.biometricOn)
                                     },
                                     onClick = {
                                         menu = false
@@ -260,7 +267,7 @@ fun LibraryScreen(
                         if (state.uploading || state.savingNote) {
                             LinearProgressIndicator(Modifier.fillMaxWidth())
                             Text(
-                                if (state.savingNote) "正在儲存筆記…" else "正在上傳…",
+                                if (state.savingNote) copy.savingNoteProgress else copy.uploading,
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         }
@@ -271,7 +278,7 @@ fun LibraryScreen(
                                 modifier = Modifier.weight(1f),
                             ) {
                                 Icon(Icons.Filled.UploadFile, contentDescription = null)
-                                Text("檔案", modifier = Modifier.padding(start = 6.dp))
+                                Text(copy.typeFile, modifier = Modifier.padding(start = 6.dp))
                             }
                             OutlinedButton(
                                 onClick = {
@@ -285,7 +292,7 @@ fun LibraryScreen(
                                 modifier = Modifier.weight(1f),
                             ) {
                                 Icon(Icons.Filled.Image, contentDescription = null)
-                                Text("圖片", modifier = Modifier.padding(start = 6.dp))
+                                Text(copy.typeImage, modifier = Modifier.padding(start = 6.dp))
                             }
                         }
                         Button(
@@ -319,8 +326,8 @@ fun LibraryScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Text(state.error, color = MaterialTheme.colorScheme.error)
-                    TextButton(onClick = onRefresh) { Text("再試一次") }
+                    Text(knownMessage(state.error, copy), color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = onRefresh) { Text(copy.retry) }
                 }
                 else -> LibraryBrowser(
                     items = state.items.orEmpty(),
@@ -386,13 +393,13 @@ fun LibraryScreen(
                         Box {
                             OutlinedButton(onClick = { noteGroupMenu = true }, modifier = Modifier.fillMaxWidth()) {
                                 Text(
-                                    if (noteCustom) "新分組" else "放到 ${canonicalGroup(noteGroup) ?: UNGROUPED_LABEL}",
+                                    if (noteCustom) copy.newGroup else fill(copy.putInGroup, mapOf("name" to displayGroup(canonicalGroup(noteGroup) ?: UNGROUPED_LABEL, copy))),
                                 )
                             }
                             DropdownMenu(expanded = noteGroupMenu, onDismissRequest = { noteGroupMenu = false }) {
                                 groups.forEach { name ->
                                     DropdownMenuItem(
-                                        text = { Text(name) },
+                                        text = { Text(displayGroup(name, copy)) },
                                         onClick = {
                                             noteGroupMenu = false
                                             noteCustom = false
@@ -401,7 +408,7 @@ fun LibraryScreen(
                                     )
                                 }
                                 DropdownMenuItem(
-                                    text = { Text("新分組…") },
+                                    text = { Text(copy.newGroupMenu) },
                                     onClick = {
                                         noteGroupMenu = false
                                         noteCustom = true
@@ -416,7 +423,7 @@ fun LibraryScreen(
                             OutlinedTextField(
                                 value = noteCustomName,
                                 onValueChange = { noteCustomName = it },
-                                label = { Text("新分組名稱") },
+                                label = { Text(copy.newGroupName) },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
                             )
@@ -457,25 +464,25 @@ fun LibraryScreen(
     if (pendingGroup != null) {
         AlertDialog(
             onDismissRequest = { if (!state.deleting) onCancelGroupDelete() },
-            title = { Text("刪除這個分組？") },
-            text = { Text("刪除「${pendingGroup.name}」入面全部 ${pendingGroup.count} 個項目？") },
+            title = { Text(copy.deleteGroupTitle) },
+            text = { Text(fill(copy.deleteGroupBody, mapOf("name" to displayGroup(pendingGroup.name, copy), "count" to pendingGroup.count.toString()))) },
             confirmButton = {
-                TextButton(onClick = onConfirmGroupDelete, enabled = !state.deleting) { Text("刪除") }
+                TextButton(onClick = onConfirmGroupDelete, enabled = !state.deleting) { Text(copy.delete) }
             },
             dismissButton = {
-                TextButton(onClick = onCancelGroupDelete, enabled = !state.deleting) { Text("取消") }
+                TextButton(onClick = onCancelGroupDelete, enabled = !state.deleting) { Text(copy.cancel) }
             },
         )
     } else if (pending != null) {
         AlertDialog(
             onDismissRequest = { if (!state.deleting) onCancelDelete() },
-            title = { Text("刪除這個項目？") },
-            text = { Text("「${pending.name}」刪除後無法復原。") },
+            title = { Text(copy.deleteItemTitle) },
+            text = { Text(fill(copy.deleteItemBody, mapOf("name" to pending.name))) },
             confirmButton = {
-                TextButton(onClick = onConfirmDelete, enabled = !state.deleting) { Text("刪除") }
+                TextButton(onClick = onConfirmDelete, enabled = !state.deleting) { Text(copy.delete) }
             },
             dismissButton = {
-                TextButton(onClick = onCancelDelete, enabled = !state.deleting) { Text("取消") }
+                TextButton(onClick = onCancelDelete, enabled = !state.deleting) { Text(copy.cancel) }
             },
         )
     }
@@ -489,7 +496,7 @@ internal fun Banner(message: String, onClear: () -> Unit, modifier: Modifier = M
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(message, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.error)
-            TextButton(onClick = onClear) { Text("關閉") }
+            TextButton(onClick = onClear) { Text(copy.close) }
         }
     }
 }
@@ -513,6 +520,7 @@ private fun DetailScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val copy = LocalAppCopy.current
     var tagDraft by remember(item.id) { mutableStateOf<String?>(null) }
     var moveMenu by remember(item.id) { mutableStateOf(false) }
     var customGroup by remember(item.id) { mutableStateOf(false) }
@@ -533,7 +541,7 @@ private fun DetailScreen(
                     } catch (_: Exception) {
                         false
                     }
-                    if (!wrote) onBanner("無法儲存檔案")
+                    if (!wrote) onBanner(copy.cannotSaveFile)
                 }
                 is ApiResult.Err -> onBanner(result.error.message)
             }
@@ -561,7 +569,7 @@ private fun DetailScreen(
                 title = { Text(item.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = copy.back)
                     }
                 },
             )
@@ -575,7 +583,7 @@ private fun DetailScreen(
                 .padding(16.dp),
         ) {
             Text(
-                "${typeLabel(item.type)} · ${formatCatalogDate(item.createdAt)} · ${formatBytes(item.size)}",
+                "${displayType(item.type, copy)} · ${formatCatalogDate(item.createdAt, pattern = copy.datePattern)} · ${formatBytes(item.size)}",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
@@ -583,13 +591,13 @@ private fun DetailScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (item.tags.isEmpty()) {
-                Text("還沒有標籤", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(copy.noTags, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
                 Column {
                     item.tags.forEach { tag ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(tag, modifier = Modifier.weight(1f))
-                            TextButton(onClick = { onRemoveTag(tag) }, enabled = !busy) { Text("移除") }
+                            TextButton(onClick = { onRemoveTag(tag) }, enabled = !busy) { Text(copy.removeTag) }
                         }
                     }
                 }
@@ -598,7 +606,7 @@ private fun DetailScreen(
                 OutlinedTextField(
                     value = tagDraft.orEmpty(),
                     onValueChange = { tagDraft = it },
-                    label = { Text("加上標籤") },
+                    label = { Text(copy.addTag) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -606,20 +614,20 @@ private fun DetailScreen(
                     TextButton(onClick = {
                         onAddTag(tagDraft.orEmpty())
                         tagDraft = null
-                    }, enabled = !busy) { Text("加上") }
-                    TextButton(onClick = { tagDraft = null }) { Text("取消") }
+                    }, enabled = !busy) { Text(copy.add) }
+                    TextButton(onClick = { tagDraft = null }) { Text(copy.cancel) }
                 }
             } else {
-                TextButton(onClick = { tagDraft = "" }, enabled = !busy) { Text("加標籤") }
+                TextButton(onClick = { tagDraft = "" }, enabled = !busy) { Text(copy.addTagShort) }
             }
             Box {
                 OutlinedButton(onClick = { moveMenu = true }, enabled = !busy) {
-                    Text("移到 ${canonicalGroup(item.group) ?: UNGROUPED_LABEL}")
+                    Text(fill(copy.moveTo, mapOf("name" to displayGroup(canonicalGroup(item.group) ?: UNGROUPED_LABEL, copy))))
                 }
                 DropdownMenu(expanded = moveMenu, onDismissRequest = { moveMenu = false }) {
                     groups.forEach { name ->
                         DropdownMenuItem(
-                            text = { Text(name) },
+                            text = { Text(displayGroup(name, copy)) },
                             onClick = {
                                 moveMenu = false
                                 customGroup = false
@@ -628,7 +636,7 @@ private fun DetailScreen(
                         )
                     }
                     DropdownMenuItem(
-                        text = { Text("新分組…") },
+                        text = { Text(copy.newGroupMenu) },
                         onClick = {
                             moveMenu = false
                             customGroup = true
@@ -640,7 +648,7 @@ private fun DetailScreen(
                 OutlinedTextField(
                     value = customName,
                     onValueChange = { customName = it },
-                    label = { Text("新分組名稱") },
+                    label = { Text(copy.newGroupName) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -648,14 +656,14 @@ private fun DetailScreen(
                     onMove(customName)
                     customGroup = false
                     customName = ""
-                }, enabled = !busy) { Text("移過去") }
+                }, enabled = !busy) { Text(copy.moveAction) }
             }
             Spacer(Modifier.height(16.dp))
             when (item.type) {
                 "image" -> {
                     when {
                         previewLoading -> CircularProgressIndicator()
-                        previewFailed || bitmap == null -> Text("圖片無法顯示", color = MaterialTheme.colorScheme.error)
+                        previewFailed || bitmap == null -> Text(copy.imageFailed, color = MaterialTheme.colorScheme.error)
                         else -> Image(
                             bitmap = bitmap!!.asImageBitmap(),
                             contentDescription = item.name,
@@ -689,7 +697,7 @@ private fun DetailScreen(
                         tint = MaterialTheme.colorScheme.primary,
                     )
                     Spacer(Modifier.height(8.dp))
-                    Text(item.mimeType ?: "檔案", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(item.mimeType ?: copy.typeFile, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Spacer(Modifier.height(20.dp))
@@ -706,11 +714,11 @@ private fun DetailScreen(
                     createDocument.launch(name)
                 }) {
                     Icon(Icons.Filled.Download, contentDescription = null)
-                    Text("下載", modifier = Modifier.padding(start = 6.dp))
+                    Text(copy.download, modifier = Modifier.padding(start = 6.dp))
                 }
                 OutlinedButton(onClick = onDelete) {
                     Icon(Icons.Filled.Delete, contentDescription = null)
-                    Text("刪除", modifier = Modifier.padding(start = 6.dp))
+                    Text(copy.delete, modifier = Modifier.padding(start = 6.dp))
                 }
             }
         }

@@ -54,7 +54,6 @@ export function LinkPreviewCard({ text }: { text: string }) {
       data-link-preview="true"
     >
       {preview?.image ? (
-        // eslint-disable-next-line @next/next/no-img-element
         <img src={preview.image} alt="" className="h-40 w-full bg-muted object-cover" />
       ) : null}
       <span className="block px-3 py-2">

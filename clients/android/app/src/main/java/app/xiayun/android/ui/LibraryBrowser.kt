@@ -62,8 +62,6 @@ import app.xiayun.core.formatBytes
 import app.xiayun.core.formatCatalogDate
 import app.xiayun.core.libraryGroupNames
 import app.xiayun.core.organizeLibrary
-import app.xiayun.core.typeLabel
-
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun LibraryBrowser(
@@ -91,6 +89,7 @@ fun LibraryBrowser(
     var newGroupName by remember { mutableStateOf("") }
     var removeTarget by remember { mutableStateOf<Pair<CloudItem, String>?>(null) }
     var filterMessage by remember { mutableStateOf<String?>(null) }
+    val copy = LocalAppCopy.current
 
     LaunchedEffect(notice) { filterMessage = null }
 
@@ -102,7 +101,7 @@ fun LibraryBrowser(
         query = ""
         typeFilter = LibraryTypeFilter.All
         tagFilter = null
-        filterMessage = "已清除篩選"
+        filterMessage = copy.filtersCleared
     }
 
     LazyColumn(
@@ -118,38 +117,38 @@ fun LibraryBrowser(
                     onValueChange = { query = it },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    placeholder = { Text("搜尋名稱或筆記內文") },
+                    placeholder = { Text(copy.search) },
                 )
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
-                        "類型",
+                        copy.filterType,
                         modifier = Modifier.align(Alignment.CenterVertically),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    TypeChoice(LibraryTypeFilter.All, "全部", typeFilter) { typeFilter = it }
-                    TypeChoice(LibraryTypeFilter.File, "檔案", typeFilter) { typeFilter = it }
-                    TypeChoice(LibraryTypeFilter.Image, "圖片", typeFilter) { typeFilter = it }
-                    TypeChoice(LibraryTypeFilter.Text, "筆記", typeFilter) { typeFilter = it }
+                    TypeChoice(LibraryTypeFilter.All, copy.allTypes, typeFilter) { typeFilter = it }
+                    TypeChoice(LibraryTypeFilter.File, copy.typeFile, typeFilter) { typeFilter = it }
+                    TypeChoice(LibraryTypeFilter.Image, copy.typeImage, typeFilter) { typeFilter = it }
+                    TypeChoice(LibraryTypeFilter.Text, copy.typeNote, typeFilter) { typeFilter = it }
                 }
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
-                        "排序",
+                        copy.filterSort,
                         modifier = Modifier.align(Alignment.CenterVertically),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    SortChoice(LibrarySort.Newest, "最新", sort) { sort = it }
-                    SortChoice(LibrarySort.Oldest, "最舊", sort) { sort = it }
-                    SortChoice(LibrarySort.Name, "名稱", sort) { sort = it }
+                    SortChoice(LibrarySort.Newest, copy.newest, sort) { sort = it }
+                    SortChoice(LibrarySort.Oldest, copy.oldest, sort) { sort = it }
+                    SortChoice(LibrarySort.Name, copy.byName, sort) { sort = it }
                     Text(
-                        "顯示 ${organized.visible.size} 項",
+                        fill(copy.showingCount, mapOf("count" to organized.visible.size.toString())),
                         modifier = Modifier.align(Alignment.CenterVertically),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -168,11 +167,11 @@ fun LibraryBrowser(
                         Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("正在看標籤「$tagFilter」", modifier = Modifier.weight(1f))
+                        Text(fill(copy.watchingTag, mapOf("tag" to tagFilter)), modifier = Modifier.weight(1f))
                         TextButton(onClick = {
                             tagFilter = null
-                            filterMessage = "已清除標籤篩選"
-                        }) { Text("清除") }
+                            filterMessage = copy.tagCleared
+                        }) { Text(copy.clear) }
                     }
                 }
             }
@@ -180,7 +179,7 @@ fun LibraryBrowser(
         if (!shownNotice.isNullOrBlank()) {
             item {
                 Text(
-                    shownNotice,
+                    knownMessage(shownNotice, copy),
                     modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -188,23 +187,23 @@ fun LibraryBrowser(
         }
         if (!banner.isNullOrBlank()) {
             item {
-                Banner(banner, onClearBanner, Modifier.widthIn(max = 720.dp))
+                Banner(knownMessage(banner, copy), onClearBanner, Modifier.widthIn(max = 720.dp))
             }
         }
         when {
             items.isEmpty() -> item {
                 EmptyCopy(
-                    title = "匣子還是空的",
-                    body = "上傳檔案、圖片，或寫一則筆記。內容只屬於這個帳號。",
+                    title = copy.emptyTitle,
+                    body = copy.emptyBody,
                 )
             }
             organized.filtering && organized.visible.isEmpty() -> item {
                 Column(Modifier.widthIn(max = 420.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                     EmptyCopy(
-                        title = "架子上沒有對得上的東西",
-                        body = "名稱、筆記內文、類型或標籤對不上。可以把條件清掉，再從整座書庫看起。",
+                        title = copy.noMatchTitle,
+                        body = copy.noMatchBody,
                     )
-                    TextButton(onClick = { clearFilters() }) { Text("清除篩選") }
+                    TextButton(onClick = { clearFilters() }) { Text(copy.clearFilters) }
                 }
             }
             else -> {
@@ -232,7 +231,7 @@ fun LibraryBrowser(
                     if (shelf.items.isEmpty()) {
                         item(key = "empty-${shelf.name}") {
                             Text(
-                                "這個分組還沒有東西。可以從別的架子移過來。",
+                                copy.emptyGroup,
                                 modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(bottom = 8.dp),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -282,14 +281,14 @@ fun LibraryBrowser(
     if (creating != null) {
         AlertDialog(
             onDismissRequest = { newGroupFor = null },
-            title = { Text("移到新分組") },
+            title = { Text(copy.moveNewTitle) },
             text = {
                 OutlinedTextField(
                     value = newGroupName,
                     onValueChange = { newGroupName = it },
                     singleLine = true,
-                    label = { Text("分組名稱") },
-                    placeholder = { Text("例如 京都行") },
+                    label = { Text(copy.groupName) },
+                    placeholder = { Text(copy.groupExample) },
                 )
             },
             confirmButton = {
@@ -301,10 +300,10 @@ fun LibraryBrowser(
                         newGroupFor = null
                     },
                     enabled = updatingId != creating.id,
-                ) { Text("移過去") }
+                ) { Text(copy.moveAction) }
             },
             dismissButton = {
-                TextButton(onClick = { newGroupFor = null }) { Text("取消") }
+                TextButton(onClick = { newGroupFor = null }) { Text(copy.cancel) }
             },
         )
     }
@@ -313,17 +312,17 @@ fun LibraryBrowser(
     if (removing != null) {
         AlertDialog(
             onDismissRequest = { removeTarget = null },
-            title = { Text("移除標籤？") },
-            text = { Text("從「${removing.first.name}」移除「${removing.second}」。") },
+            title = { Text(copy.removeTagTitle) },
+            text = { Text(fill(copy.removeTagBody, mapOf("name" to removing.first.name, "tag" to removing.second))) },
             confirmButton = {
                 TextButton(onClick = {
                     onRemoveTag(removing.first, removing.second)
                     if (tagFilter == removing.second) tagFilter = null
                     removeTarget = null
-                }) { Text("移除") }
+                }) { Text(copy.removeTag) }
             },
             dismissButton = {
-                TextButton(onClick = { removeTarget = null }) { Text("取消") }
+                TextButton(onClick = { removeTarget = null }) { Text(copy.cancel) }
             },
         )
     }
@@ -374,6 +373,8 @@ private fun GroupHeader(
     onToggle: () -> Unit,
     onDelete: (() -> Unit)?,
 ) {
+    val copy = LocalAppCopy.current
+    val shown = displayGroup(name, copy)
     Row(
         Modifier
             .widthIn(max = 720.dp)
@@ -384,13 +385,18 @@ private fun GroupHeader(
         Row(
             Modifier
                 .weight(1f)
-                .semantics { contentDescription = if (open) "收合$name，共$count 項" else "展開$name，共$count 項" }
+                .semantics {
+                    contentDescription = fill(
+                        if (open) copy.collapseGroup else copy.expandGroup,
+                        mapOf("name" to shown, "count" to count.toString()),
+                    )
+                }
                 .clickable(onClick = onToggle)
                 .padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                name,
+                shown,
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.titleLarge,
                 color = if (muted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
@@ -412,7 +418,7 @@ private fun GroupHeader(
         }
         if (onDelete != null) {
             IconButton(onClick = onDelete) {
-                Icon(Icons.Filled.Delete, contentDescription = "刪除$name")
+                Icon(Icons.Filled.Delete, contentDescription = fill(copy.deleteNamed, mapOf("name" to shown)))
             }
         }
     }
@@ -444,18 +450,18 @@ private fun ItemCard(
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Row(Modifier.weight(1f).clickable(onClick = onOpen), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(iconFor(item.type), contentDescription = typeLabel(item.type), tint = MaterialTheme.colorScheme.primary)
+                    Icon(iconFor(item.type), contentDescription = displayType(item.type, LocalAppCopy.current), tint = MaterialTheme.colorScheme.primary)
                     Column(Modifier.padding(start = 12.dp).weight(1f)) {
                         Text(item.name, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "${typeLabel(item.type)} · ${formatCatalogDate(item.createdAt)} · ${formatBytes(item.size)}",
+                            "${displayType(item.type, LocalAppCopy.current)} · ${formatCatalogDate(item.createdAt, pattern = LocalAppCopy.current.datePattern)} · ${formatBytes(item.size)}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
                 IconButton(onClick = onDelete) {
-                    Icon(Icons.Filled.Delete, contentDescription = "刪除")
+                    Icon(Icons.Filled.Delete, contentDescription = LocalAppCopy.current.delete)
                 }
             }
             if (!item.excerpt.isNullOrBlank()) {
@@ -470,7 +476,7 @@ private fun ItemCard(
                 NoteLinkPreview(text = item.excerpt.orEmpty(), load = previewLink)
             }
             if (item.tags.isEmpty()) {
-                Text("還沒有標籤", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                Text(LocalAppCopy.current.noTags, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             } else {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     item.tags.forEach { tag ->
@@ -499,21 +505,21 @@ private fun ItemCard(
                         onValueChange = onDraft,
                         modifier = Modifier.weight(1f),
                         singleLine = true,
-                        placeholder = { Text("例如 待寄") },
-                        label = { Text("為${item.name}加上標籤") },
+                        placeholder = { Text(LocalAppCopy.current.tagExample) },
+                        label = { Text(fill(LocalAppCopy.current.tagFor, mapOf("name" to item.name))) },
                     )
-                    TextButton(onClick = onSubmitTag, enabled = !busy) { Text("加上") }
-                    TextButton(onClick = onCancelTag, enabled = !busy) { Text("取消") }
+                    TextButton(onClick = onSubmitTag, enabled = !busy) { Text(LocalAppCopy.current.add) }
+                    TextButton(onClick = onCancelTag, enabled = !busy) { Text(LocalAppCopy.current.cancel) }
                 } else {
-                    TextButton(onClick = onStartTag, enabled = !busy) { Text("加標籤") }
+                    TextButton(onClick = onStartTag, enabled = !busy) { Text(LocalAppCopy.current.addTagShort) }
                     Box {
                         TextButton(onClick = { menu = true }, enabled = !busy) {
-                            Text("移到 ${canonicalGroup(item.group) ?: UNGROUPED_LABEL}")
+                            Text(fill(LocalAppCopy.current.moveTo, mapOf("name" to displayGroup(canonicalGroup(item.group) ?: UNGROUPED_LABEL, LocalAppCopy.current))))
                         }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                             groupNames.forEach { name ->
                                 DropdownMenuItem(
-                                    text = { Text(name) },
+                                    text = { Text(displayGroup(name, LocalAppCopy.current)) },
                                     onClick = {
                                         menu = false
                                         onMove(if (name == UNGROUPED_LABEL) null else name)
@@ -521,7 +527,7 @@ private fun ItemCard(
                                 )
                             }
                             DropdownMenuItem(
-                                text = { Text("新分組…") },
+                                text = { Text(LocalAppCopy.current.newGroupMenu) },
                                 onClick = {
                                     menu = false
                                     onNewGroup()

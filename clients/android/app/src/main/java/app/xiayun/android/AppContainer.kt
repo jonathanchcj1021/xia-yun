@@ -29,6 +29,10 @@ class AppContainer(context: Context) {
 
     fun api(): XiaYunApi = XiaYunApi(baseUrlProvider = ::baseUrl)
 
+    fun langCode(): String =
+        appContext.getSharedPreferences("xia-yun", Context.MODE_PRIVATE).getString("xy-lang", null)
+            ?: "zh-Hant"
+
     fun notifyUnauthorized() {
         unauthorized.tryEmit(Unit)
     }
