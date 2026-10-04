@@ -112,6 +112,7 @@ fun XiaYunApp(
                 onClearBanner = libraryModel::clearBanner,
                 onBanner = libraryModel::showBanner,
                 fetchContent = libraryModel::fetchContent,
+                previewLink = libraryModel::previewLink,
                 onSignOut = appModel::signOut,
                 onToggleBiometric = { enable ->
                     if (!enable) {

@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import app.xiayun.android.AppContainer
 import app.xiayun.core.ApiResult
 import app.xiayun.core.CloudItem
+import app.xiayun.core.LinkPreview
 import app.xiayun.core.MAX_GROUP_CHARS
 import app.xiayun.core.MAX_TAG_CHARS
 import app.xiayun.core.UNGROUPED_LABEL
@@ -88,6 +89,8 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
             refresh()
         }
     }
+
+    suspend fun previewLink(url: String): ApiResult<LinkPreview> = container.api().linkPreview(url)
 
     fun createNote(title: String, body: String, group: String?) {
         val session = container.session.value ?: return

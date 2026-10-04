@@ -52,7 +52,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.xiayun.core.CloudItem
+import app.xiayun.core.ApiResult
 import app.xiayun.core.LibrarySort
+import app.xiayun.core.LinkPreview
 import app.xiayun.core.LibraryTypeFilter
 import app.xiayun.core.UNGROUPED_LABEL
 import app.xiayun.core.canonicalGroup
@@ -76,6 +78,7 @@ fun LibraryBrowser(
     onRemoveTag: (CloudItem, String) -> Unit,
     onMove: (CloudItem, String?) -> Unit,
     onClearBanner: () -> Unit,
+    previewLink: suspend (String) -> ApiResult<LinkPreview>,
     modifier: Modifier = Modifier,
 ) {
     var query by remember { mutableStateOf("") }
@@ -266,6 +269,7 @@ fun LibraryBrowser(
                                     newGroupName = ""
                                     newGroupFor = item
                                 },
+                                previewLink = previewLink,
                             )
                         }
                     }
@@ -433,6 +437,7 @@ private fun ItemCard(
     onLongPressTag: (String) -> Unit,
     onMove: (String?) -> Unit,
     onNewGroup: () -> Unit,
+    previewLink: suspend (String) -> ApiResult<LinkPreview>,
 ) {
     var menu by remember { mutableStateOf(false) }
     Card(modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
@@ -460,6 +465,9 @@ private fun ItemCard(
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
+            }
+            if (item.type == "text") {
+                NoteLinkPreview(text = item.excerpt.orEmpty(), load = previewLink)
             }
             if (item.tags.isEmpty()) {
                 Text("還沒有標籤", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)

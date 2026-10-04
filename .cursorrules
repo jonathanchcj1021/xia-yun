@@ -63,6 +63,16 @@
 - **iOS**：SwiftUI + MVVM 架構，UI 刷新綁定 `@MainActor`，Closures 內使用 `[weak self]`。
 
 # ==========================================
+# 開發與部署邊界
+# ==========================================
+- 開發分支與功能分支不使用 Cloudflare。不要部署 preview worker，push 到 `dev` 不要執行 `wrangler deploy`。
+- 保留 GitHub 分支 `dev`、`prd` 與功能分支。
+- 開發期間的測試在雲端 VM 本地執行，不打到 Cloudflare。
+- 對 `dev` 開 pull request（opened、synchronize、reopened）才部署正式 Worker：`wrangler deploy --name xia-yun`。只用正式綁定：D1 `DB` 資料庫 `xia-yun` id `503392af-02cb-4fe6-b05d-bcee0aae7746`，R2 `BLOBS` bucket `xia-yun`。不要使用 `--env preview`，不要部署 `xia-yun-preview`。
+- push 到 `prd` 用同一條正式部署指令，更新 https://xia-yun.jonathanchcj1021.workers.dev。
+- 測試 job 可以留在 CI，但不得呼叫 Cloudflare。
+
+# ==========================================
 # 交付驗證規範
 # ==========================================
 - 處理 Bug 先列出 Root Cause。

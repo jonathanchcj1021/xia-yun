@@ -23,6 +23,12 @@ data class OrganizedLibrary(
     val shelves: List<LibraryShelf>,
 )
 
+fun firstHttpUrl(text: String?): String? {
+    if (text.isNullOrBlank()) return null
+    val match = Regex("""https?://[^\s<>"']+""", RegexOption.IGNORE_CASE).find(text) ?: return null
+    return match.value.trimEnd { it in ")].,;!?'\"」』" }.takeIf { it.length > "https://".length }
+}
+
 fun canonicalGroup(group: String?): String? {
     val cleaned = group?.trim()?.replace(Regex("\\s+"), " ")?.takeIf { it.isNotEmpty() }
     if (cleaned == null || cleaned == UNGROUPED_LABEL) return null
