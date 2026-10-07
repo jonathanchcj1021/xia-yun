@@ -61,10 +61,33 @@ npm run dev
 - 挑戰 5 分鐘內有效，而且只能用一次。登入必須帶電子郵件，這個版本不會做無帳號提示的 discoverable 登入。
 - `Secure` 只在 HTTPS 時設定。本機 HTTP 不會加 `Secure`。
 - 這個版本沒有 CORS 標頭。原生 App 不是瀏覽器，不需要 CORS；瀏覽器跨網域呼叫則尚未開放。
-- 單一檔案上限 **32 MB**。`multipart` 請求必須帶 `Content-Length`，整個請求不得超過 33 MB，否則 `413` / `PAYLOAD_TOO_LARGE` 或 `411`。
+- 單一檔案上限 **32 MB**。整個 multipart 請求不得超過 33 MB，否則 `413` / `PAYLOAD_TOO_LARGE`。`Content-Length` 若存在且不是數字，回 `411`。沒有這個標頭時，伺服器仍會邊讀邊計算，超過 33 MB 就停止。
+- 登入後的 `/files` 依分組瀏覽檔案與圖片（不含筆記），每一列有名稱、大小與上傳時間。
 - 筆記只能用 JSON，不能用 multipart。標題 1–200 字元，內文最多 10 萬字元，內文可以是空字串。
 - 密碼 8–128 字元，由伺服器雜湊。客戶端送原始密碼。
 - 登出只作廢目前這顆 cookie，或請求裡的 Bearer token 對應的工作階段。其他裝置保持登入。
 - 清單一次回傳全部項目，沒有分頁。時間是 UTC 的 ISO 8601 字串（`createdAt`）。
 - 圖片預覽用 `GET /api/items/[id]/content`（預設 inline）。下載加上 `?disposition=attachment`。
 - 沒有分享 API。沒有原生 App。
+
+## Windows 命令列（cmd）
+
+用 `curl.exe`，不要用 PowerShell 的 `curl` 別名。下面的網址是正式站。把佔位符換成自己的值，不要把真密碼或權杖寫進這個檔案。
+
+登入。回應 JSON 含 `token`：
+
+```bat
+curl.exe -s -X POST "https://xia-yun.jonathanchcj1021.workers.dev/api/auth/login" -H "Content-Type: application/json" -d "{\"email\":\"you@example.com\",\"password\":\"YOUR_PASSWORD\",\"client\":\"native\"}"
+```
+
+上傳一個檔案。回應 JSON 的 `item.id` 是項目 id：
+
+```bat
+curl.exe -s -X POST "https://xia-yun.jonathanchcj1021.workers.dev/api/items" -H "Authorization: Bearer %TOKEN%" -F "file=@C:\path\to\file.bin"
+```
+
+依 id 下載到本機路徑：
+
+```bat
+curl.exe -L -o "C:\path\to\saved.bin" -H "Authorization: Bearer %TOKEN%" "https://xia-yun.jonathanchcj1021.workers.dev/api/items/%FILE_ID%/content?disposition=attachment"
+```

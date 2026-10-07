@@ -160,6 +160,7 @@ data class AppCopy(
     val badServer: String = "伺服器位址不正確",
     val sessionExpired: String = "工作階段已失效，請重新登入",
     val openProduct: String = "關於匣雲",
+    val openFiles: String = "在瀏覽器開啟檔案",
     val bioKey: String = "無法建立生物辨識金鑰",
     val bioUnavailable: String = "這台裝置無法使用生物辨識解鎖",
     val bioEnableTitle: String = "啟用生物辨識解鎖",
@@ -374,6 +375,7 @@ private val zhHans = zhHant.copy(
     patchMissing = "服务器尚未提供分组和标签更新",
     groupDeleteMissing = "服务器尚未提供整组删除",
     unnamedFile = "未命名文件",
+    openFiles = "在浏览器打开文件",
 )
 
 private val en = AppCopy(
@@ -530,6 +532,7 @@ private val en = AppCopy(
     dateTimePattern = "MMM d, HH:mm",
     datePattern = "MMM d, yyyy",
     unnamedFile = "Untitled file",
+    openFiles = "Open files in the browser",
 )
 
 
@@ -545,6 +548,20 @@ fun displayGroup(name: String, copy: AppCopy): String =
 fun openProductPage(context: Context) {
     val page = Intent(Intent.ACTION_VIEW, Uri.parse("${BaseUrls.DEFAULT}/product"))
     context.startActivity(page)
+}
+
+fun openFilesPage(context: Context) {
+    val page = Intent(Intent.ACTION_VIEW, Uri.parse("${BaseUrls.DEFAULT}/files"))
+    context.startActivity(page)
+}
+
+fun itemStamp(type: String, createdAt: String, size: Long, copy: AppCopy): String {
+    val whenText = if (type == "text") {
+        app.xiayun.core.formatCatalogDate(createdAt, pattern = copy.datePattern)
+    } else {
+        app.xiayun.core.formatTimestamp(createdAt, pattern = copy.dateTimePattern)
+    }
+    return "${displayType(type, copy)} · $whenText · ${app.xiayun.core.formatBytes(size)}"
 }
 
 fun displayType(type: String, copy: AppCopy): String = when (type) {

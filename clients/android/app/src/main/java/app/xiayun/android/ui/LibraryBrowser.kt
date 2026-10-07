@@ -58,8 +58,6 @@ import app.xiayun.core.LinkPreview
 import app.xiayun.core.LibraryTypeFilter
 import app.xiayun.core.UNGROUPED_LABEL
 import app.xiayun.core.canonicalGroup
-import app.xiayun.core.formatBytes
-import app.xiayun.core.formatCatalogDate
 import app.xiayun.core.libraryGroupNames
 import app.xiayun.core.organizeLibrary
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
@@ -455,7 +453,7 @@ private fun ItemCard(
                     Column(Modifier.padding(start = 12.dp).weight(1f)) {
                         Text(item.name, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "${displayType(item.type, LocalAppCopy.current)} · ${formatCatalogDate(item.createdAt, pattern = LocalAppCopy.current.datePattern)} · ${formatBytes(item.size)}",
+                            itemStamp(item.type, item.createdAt, item.size, LocalAppCopy.current),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

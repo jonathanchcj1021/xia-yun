@@ -599,6 +599,9 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
             </div>
           </Link>
           <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="outline" className="h-10">
+              <Link href="/files">{copy.filesNav}</Link>
+            </Button>
             <LanguageSwitcher locale={locale} />
             <Button
               variant="outline"
@@ -656,6 +659,7 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
             <input
               ref={fileInputRef}
               type="file"
+              multiple
               className="sr-only"
               onChange={(event) => {
                 void uploadFiles(Array.from(event.target.files ?? []));
