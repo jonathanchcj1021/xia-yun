@@ -78,8 +78,6 @@ import app.xiayun.core.LinkPreview
 import app.xiayun.core.UNGROUPED_LABEL
 import app.xiayun.core.Upload
 import app.xiayun.core.canonicalGroup
-import app.xiayun.core.formatBytes
-import app.xiayun.core.formatCatalogDate
 import app.xiayun.core.libraryGroupNames
 import kotlinx.coroutines.launch
 
@@ -227,6 +225,13 @@ fun LibraryScreen(
                                 onClick = {
                                     menu = false
                                     openProductPage(context)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(copy.openFiles) },
+                                onClick = {
+                                    menu = false
+                                    openFilesPage(context)
                                 },
                             )
                             DropdownMenuItem(
@@ -584,7 +589,7 @@ private fun DetailScreen(
                 .padding(16.dp),
         ) {
             Text(
-                "${displayType(item.type, copy)} · ${formatCatalogDate(item.createdAt, pattern = copy.datePattern)} · ${formatBytes(item.size)}",
+                itemStamp(item.type, item.createdAt, item.size, copy),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(

@@ -21,7 +21,12 @@ export function Welcome({ locale, signedIn = false }: { locale: Locale; signedIn
             <Mark className="size-7 text-primary" />
             <span className="text-base font-semibold tracking-tight">{copy.brand}</span>
           </div>
-          <LanguageSwitcher locale={locale} />
+          <div className="flex items-center gap-2">
+            <Link href="/files" className="text-sm font-medium text-foreground">
+              {copy.filesNav}
+            </Link>
+            <LanguageSwitcher locale={locale} />
+          </div>
         </div>
       </header>
       <main className="mx-auto grid w-full max-w-5xl flex-1 items-center gap-10 px-4 py-12 md:grid-cols-[1.1fr_0.9fr] md:py-20">

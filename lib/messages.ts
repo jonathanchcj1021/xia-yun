@@ -135,6 +135,14 @@ export type Copy = {
   notFoundTitle: string;
   notFoundBody: string;
   backHome: string;
+  filesNav: string;
+  filesTitle: string;
+  filesLead: string;
+  filesBack: string;
+  filesLibrary: string;
+  filesEmpty: string;
+  filesEmptyFolder: string;
+  filesCount: string;
   pageErrorTitle: string;
   pageErrorBody: string;
 };
@@ -274,6 +282,14 @@ const zhHant: Copy = {
   notFoundTitle: "找不到這個頁面",
   notFoundBody: "這個網址沒有對應的頁面。回到匣雲首頁繼續。",
   backHome: "回到首頁",
+  filesNav: "檔案",
+  filesTitle: "檔案",
+  filesLead: "依分組瀏覽檔案與圖片。筆記留在書庫。",
+  filesBack: "返回分組",
+  filesLibrary: "回到書庫",
+  filesEmpty: "還沒有檔案或圖片。",
+  filesEmptyFolder: "這個分組裡還沒有檔案。",
+  filesCount: "{count} 個",
   pageErrorTitle: "頁面暫時無法顯示",
   pageErrorBody: "匣雲遇到沒有預期的問題。再試一次，或重新整理瀏覽器。",
 };
@@ -410,6 +426,14 @@ const zhHans: Copy = {
   notFoundTitle: "找不到这个页面",
   notFoundBody: "这个网址没有对应的页面。回到匣云首页继续。",
   backHome: "回到首页",
+  filesNav: "文件",
+  filesTitle: "文件",
+  filesLead: "按分组浏览文件和图片。笔记留在书库。",
+  filesBack: "返回分组",
+  filesLibrary: "回到书库",
+  filesEmpty: "还没有文件或图片。",
+  filesEmptyFolder: "这个分组里还没有文件。",
+  filesCount: "{count} 个",
   pageErrorTitle: "页面暂时无法显示",
   pageErrorBody: "匣云遇到没有预期的问题。再试一次，或重新整理浏览器。",
 };
@@ -549,6 +573,14 @@ const en: Copy = {
   notFoundTitle: "This page is not here",
   notFoundBody: "This address does not match a page. Go back to the Xia Yun homepage.",
   backHome: "Back to the homepage",
+  filesNav: "Files",
+  filesTitle: "Files",
+  filesLead: "Browse files and pictures by group. Notes stay in the library.",
+  filesBack: "Back to folders",
+  filesLibrary: "Back to the library",
+  filesEmpty: "No files or pictures yet.",
+  filesEmptyFolder: "This folder has no files yet.",
+  filesCount: "{count}",
   pageErrorTitle: "This page cannot be shown",
   pageErrorBody: "Xia Yun hit an unexpected problem. Try again, or reload the browser.",
 };

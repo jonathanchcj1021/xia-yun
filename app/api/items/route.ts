@@ -1,6 +1,13 @@
 import type { NextRequest } from "next/server";
 import { MAX_REQUEST_BYTES, MAX_UPLOAD_BYTES } from "@/lib/constants";
-import { cryptoErrorResponse, jsonError, jsonOk, isRecord, readJson } from "@/lib/http";
+import {
+  cryptoErrorResponse,
+  jsonError,
+  jsonOk,
+  isRecord,
+  readCappedBytes,
+  readJson,
+} from "@/lib/http";
 import { createBlobItem, createTextItem, deleteGroup, listItems } from "@/lib/items";
 import { getCurrentUser } from "@/lib/users";
 import {
@@ -98,23 +105,31 @@ function readOptionalMeta(value: Record<string, unknown>) {
 }
 
 async function createUpload(request: NextRequest, userId: string) {
-  const declaredLength = Number(request.headers.get("content-length"));
-  if (!Number.isFinite(declaredLength) || declaredLength < 0) {
-    return jsonError(411, "VALIDATION", "上傳請求需要 Content-Length");
-  }
-  if (declaredLength > MAX_REQUEST_BYTES) {
-    return jsonError(413, "PAYLOAD_TOO_LARGE", "檔案超過 32 MB 上限");
+  const contentType = request.headers.get("content-type") ?? "";
+  const capped = await readCappedBytes(request, MAX_REQUEST_BYTES);
+  if ("error" in capped) {
+    if (capped.error === "too-large") {
+      return jsonError(413, "PAYLOAD_TOO_LARGE", "檔案超過 32 MB 上限");
+    }
+    if (capped.error === "invalid-length") {
+      return jsonError(411, "VALIDATION", "上傳請求需要 Content-Length");
+    }
+    return jsonError(400, "VALIDATION", "無法讀取上傳內容");
   }
 
   let form: FormData;
   try {
-    form = await request.formData();
+    form = await new Request("https://xia-yun.local/upload", {
+      method: "POST",
+      headers: { "content-type": contentType },
+      body: Buffer.from(capped.bytes),
+    }).formData();
   } catch {
     return jsonError(400, "VALIDATION", "無法讀取上傳內容");
   }
 
-  const uploaded = form.get("file");
-  if (!(uploaded instanceof File)) {
+  const uploaded = uploadBlob(form.get("file"));
+  if (!uploaded) {
     return jsonError(400, "VALIDATION", "請選擇要上傳的檔案");
   }
   if (uploaded.size > MAX_UPLOAD_BYTES) {
@@ -164,6 +179,19 @@ async function createUpload(request: NextRequest, userId: string) {
   } catch (error) {
     return cryptoErrorResponse(error) ?? jsonError(500, "UNAVAILABLE", "暫時無法儲存內容");
   }
+}
+
+function uploadBlob(value: FormDataEntryValue | null) {
+  if (value == null || typeof value === "string") return null;
+  if (typeof value.arrayBuffer !== "function" || typeof value.size !== "number") return null;
+  const named = value as File;
+  const name = typeof named.name === "string" ? named.name : "";
+  return {
+    name,
+    type: value.type || "application/octet-stream",
+    size: value.size,
+    arrayBuffer: () => value.arrayBuffer(),
+  };
 }
 
 function readUploadMeta(form: FormData) {
