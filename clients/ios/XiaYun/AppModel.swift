@@ -68,6 +68,7 @@ final class AppModel: ObservableObject {
         }
         do {
             let secret = try vault.load(context: nil)
+            try? vault.save(secret, requireBiometry: false)
             try adopt(secret)
             user = try await client.currentUser()
             accountEmail = user?.email ?? secret.email
@@ -160,6 +161,7 @@ final class AppModel: ObservableObject {
         context.localizedReason = "解鎖匣雲裡已儲存的登入"
         do {
             let secret = try vault.load(context: context)
+            try? vault.save(secret, requireBiometry: true)
             try adopt(secret)
             user = try await client.currentUser()
             accountEmail = user?.email ?? secret.email
@@ -428,6 +430,7 @@ final class AppModel: ObservableObject {
     private func applyBaseURL(_ url: URL) {
         baseURLText = url.absoluteString
         defaults.set(url.absoluteString, forKey: Pref.baseURL)
+        SharedDefaults.storeBaseURL(url.absoluteString)
         let existing = client.credential
         client = APIClient(baseURL: url, credential: existing)
     }

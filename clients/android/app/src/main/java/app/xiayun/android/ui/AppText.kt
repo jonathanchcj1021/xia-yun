@@ -189,6 +189,20 @@ data class AppCopy(
     val dateTimePattern: String = "M月d日 HH:mm",
     val datePattern: String = "yyyy年M月d日",
     val unnamedFile: String = "未命名檔案",
+    val shareTitle: String = "分享到匣雲",
+    val shareLoginTitle: String = "請先登入匣雲",
+    val shareLoginBody: String = "從其他 App 分享前，要先用現有帳號登入匣雲。",
+    val shareOpenApp: String = "打開匣雲",
+    val shareGroupTitle: String = "放到哪個分組？",
+    val shareTextLead: String = "這則文字會存成筆記",
+    val shareImageLead: String = "這張圖片會存成圖片",
+    val shareLinkTitle: String = "連結",
+    val shareFallbackTitle: String = "分享",
+    val shareSaved: String = "已存進匣雲",
+    val shareUnsupported: String = "匣雲只能接收文字、連結或圖片",
+    val shareSaving: String = "正在存進匣雲…",
+    val shareNewGroup: String = "或輸入新分組名稱",
+    val shareGroupsFailed: String = "讀不到現有分組，仍可存到未分組或新名稱",
 )
 
 private val zhHant = AppCopy(
@@ -376,6 +390,20 @@ private val zhHans = zhHant.copy(
     groupDeleteMissing = "服务器尚未提供整组删除",
     unnamedFile = "未命名文件",
     openFiles = "在浏览器打开文件",
+    shareTitle = "分享到匣云",
+    shareLoginTitle = "请先登录匣云",
+    shareLoginBody = "从其他应用分享前，要先用现有账号登录匣云。",
+    shareOpenApp = "打开匣云",
+    shareGroupTitle = "放到哪个分组？",
+    shareTextLead = "这段文字会存成笔记",
+    shareImageLead = "这张图片会存成图片",
+    shareLinkTitle = "链接",
+    shareFallbackTitle = "分享",
+    shareSaved = "已存进匣云",
+    shareUnsupported = "匣云只能接收文字、链接或图片",
+    shareSaving = "正在存进匣云…",
+    shareNewGroup = "或输入新分组名称",
+    shareGroupsFailed = "读不到现有分组，仍可存到未分组或新名称",
 )
 
 private val en = AppCopy(
@@ -533,6 +561,20 @@ private val en = AppCopy(
     datePattern = "MMM d, yyyy",
     unnamedFile = "Untitled file",
     openFiles = "Open files in the browser",
+    shareTitle = "Share to Xia Yun",
+    shareLoginTitle = "Log in to Xia Yun first",
+    shareLoginBody = "Log in with your existing Xia Yun account before sharing from another app.",
+    shareOpenApp = "Open Xia Yun",
+    shareGroupTitle = "Which group?",
+    shareTextLead = "This text is saved as a note",
+    shareImageLead = "This picture is saved as an image",
+    shareLinkTitle = "Link",
+    shareFallbackTitle = "Share",
+    shareSaved = "Saved to Xia Yun",
+    shareUnsupported = "Xia Yun can accept text, a link, or a picture",
+    shareSaving = "Saving to Xia Yun…",
+    shareNewGroup = "Or type a new group name",
+    shareGroupsFailed = "Existing groups could not be loaded. You can still use Ungrouped or a new name.",
 )
 
 

@@ -10,6 +10,19 @@ import java.util.Locale
 
 class LibraryOrganizeTest {
     @Test
+    fun shareNoteKeepsUrlOnlyAsLinkAndOtherTextAsFirstLine() {
+        val link = shareNote("https://example.com/a", "連結", "分享")
+        assertEquals("連結", link?.title)
+        assertEquals("https://example.com/a", link?.body)
+        val mixed = shareNote("看這個\nhttps://example.com/a", "連結", "分享")
+        assertEquals("看這個", mixed?.title)
+        assertEquals("看這個\nhttps://example.com/a", mixed?.body)
+        assertNull(shareNote("   ", "連結", "分享"))
+        assertEquals(null, canonicalGroup(" 未分組 "))
+        assertEquals("旅行", canonicalGroup(" 旅行 "))
+    }
+
+    @Test
     fun groupsSortWithUngroupedLast() {
         val organized = organizeLibrary(sample(), "", LibraryTypeFilter.All, LibrarySort.Newest, null)
         assertFalse(organized.filtering)

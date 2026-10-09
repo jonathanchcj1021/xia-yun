@@ -166,7 +166,12 @@ class XiaYunApi internal constructor(
         }
     }
 
-    suspend fun createNote(session: AuthSession, title: String, body: String): ApiResult<CloudItem> {
+    suspend fun createNote(
+        session: AuthSession,
+        title: String,
+        body: String,
+        group: String? = null,
+    ): ApiResult<CloudItem> {
         val trimmed = title.trim()
         if (trimmed.isEmpty()) {
             return ApiResult.Err(ApiError(0, "VALIDATION", ClientMessages.NOTE_TITLE))
@@ -181,6 +186,8 @@ class XiaYunApi internal constructor(
             put("type", "text")
             put("title", trimmed)
             put("body", body)
+            val cleaned = canonicalGroup(group)
+            if (cleaned != null) put("group", cleaned)
         }
         val builder = authed("/api/items", session) ?: return badUrl()
         val raw = execute(builder.post(encode(payload).toRequestBody(JSON)).build())
@@ -215,10 +222,15 @@ class XiaYunApi internal constructor(
         val display = sanitizeFileName(upload.displayName?.takeIf { it.isNotBlank() } ?: filename)
         val mime = normalizeMime(upload.mimeType)
         val type = hintedItemType(mime)
-        val multipart = MultipartBody.Builder()
+        val multipartBuilder = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart("name", display)
             .addFormDataPart("type", type)
+        val cleanedGroup = canonicalGroup(upload.group)
+        if (cleanedGroup != null) {
+            multipartBuilder.addFormDataPart("group", cleanedGroup)
+        }
+        val multipart = multipartBuilder
             .addFormDataPart(
                 "file",
                 filename,
