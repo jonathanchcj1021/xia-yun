@@ -114,6 +114,7 @@ fun XiaYunApp(
                 biometricAvailable = vault.canAuthenticate(),
                 onRefresh = libraryModel::refresh,
                 onUpload = libraryModel::upload,
+                onDeleteMany = libraryModel::deleteMany,
                 onCreateNote = libraryModel::createNote,
                 onUpdateNote = libraryModel::updateNote,
                 onAddTag = libraryModel::addTag,

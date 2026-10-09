@@ -82,6 +82,17 @@ fun bearerFrom(jsonToken: String?, sessionCookie: String?): String? =
     jsonToken?.trim()?.takeIf { it.isNotEmpty() }
         ?: sessionCookie?.trim()?.takeIf { it.isNotEmpty() }
 
+/**
+ * Share sheet can open while the unlocked token lives only in memory.
+ * Biometric login clears the plain store; a password login writes it back.
+ * Prefer the live session, then the token just stored on disk.
+ */
+fun shareSession(live: AuthSession?, stored: AuthSession?): AuthSession? {
+    val memory = live?.takeIf { it.hasToken() }
+    if (memory != null) return memory
+    return stored?.takeIf { it.hasToken() }
+}
+
 object SessionCodec {
     private val json = Json { ignoreUnknownKeys = true }
 

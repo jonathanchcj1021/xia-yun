@@ -305,6 +305,30 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
+    fun deleteMany(ids: List<String>) {
+        if (ids.isEmpty() || _state.value.deleting) return
+        val session = container.session.value ?: return
+        val gone = ids.toSet()
+        viewModelScope.launch {
+            _state.update { it.copy(deleting = true, banner = null) }
+            when (val result = container.api().deleteItems(session, ids)) {
+                is ApiResult.Ok -> _state.update {
+                    it.copy(
+                        deleting = false,
+                        detail = if (it.detail?.id in gone) null else it.detail,
+                        pendingDelete = it.pendingDelete?.takeUnless { row -> row.id in gone },
+                        items = it.items?.filterNot { row -> row.id in gone },
+                        notice = fill(t().deleteSelectedDone, mapOf("count" to result.value.toString())),
+                    )
+                }
+                is ApiResult.Err -> {
+                    if (result.error.status == 401) container.notifyUnauthorized()
+                    _state.update { it.copy(deleting = false, banner = result.error.message) }
+                }
+            }
+        }
+    }
+
     fun confirmDelete() {
         val item = _state.value.pendingDelete ?: return
         val session = container.session.value ?: return
