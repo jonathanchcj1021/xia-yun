@@ -143,6 +143,12 @@ export type Copy = {
   filesEmpty: string;
   filesEmptyFolder: string;
   filesCount: string;
+  uploadGroup: string;
+  deleteSelected: string;
+  deleteSelectedTitle: string;
+  deleteSelectedBody: string;
+  selectedCount: string;
+  selectFile: string;
   pageErrorTitle: string;
   pageErrorBody: string;
 };
@@ -290,6 +296,12 @@ const zhHant: Copy = {
   filesEmpty: "還沒有檔案或圖片。",
   filesEmptyFolder: "這個分組裡還沒有檔案。",
   filesCount: "{count} 個",
+  uploadGroup: "上傳到這個分組",
+  deleteSelected: "刪除所選",
+  deleteSelectedTitle: "刪除這 {count} 個檔案？",
+  deleteSelectedBody: "這 {count} 個檔案會從你的帳號移除，無法復原。",
+  selectedCount: "已選 {count} 個",
+  selectFile: "選取 {name}",
   pageErrorTitle: "頁面暫時無法顯示",
   pageErrorBody: "匣雲遇到沒有預期的問題。再試一次，或重新整理瀏覽器。",
 };
@@ -434,6 +446,12 @@ const zhHans: Copy = {
   filesEmpty: "还没有文件或图片。",
   filesEmptyFolder: "这个分组里还没有文件。",
   filesCount: "{count} 个",
+  uploadGroup: "上传到这个分组",
+  deleteSelected: "删除所选",
+  deleteSelectedTitle: "删除这 {count} 个文件？",
+  deleteSelectedBody: "这 {count} 个文件会从你的账号移除，无法恢复。",
+  selectedCount: "已选 {count} 个",
+  selectFile: "选取 {name}",
   pageErrorTitle: "页面暂时无法显示",
   pageErrorBody: "匣云遇到没有预期的问题。再试一次，或重新整理浏览器。",
 };
@@ -581,6 +599,12 @@ const en: Copy = {
   filesEmpty: "No files or pictures yet.",
   filesEmptyFolder: "This folder has no files yet.",
   filesCount: "{count}",
+  uploadGroup: "Upload into this group",
+  deleteSelected: "Delete selected",
+  deleteSelectedTitle: "Delete these {count} files?",
+  deleteSelectedBody: "These {count} files leave your account and cannot be restored.",
+  selectedCount: "{count} selected",
+  selectFile: "Select {name}",
   pageErrorTitle: "This page cannot be shown",
   pageErrorBody: "Xia Yun hit an unexpected problem. Try again, or reload the browser.",
 };

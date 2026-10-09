@@ -42,6 +42,11 @@ const phrases: Record<string, { "zh-Hans": string; en: string }> = {
   "type 只能是 file 或 image": { "zh-Hans": "type 只能是 file 或 image", en: "type can only be file or image" },
   "找不到這個項目": { "zh-Hans": "找不到这个项目", en: "This item was not found" },
   "找不到檔案內容": { "zh-Hans": "找不到文件内容", en: "The file content was not found" },
+  "請提供要刪除的檔案": { "zh-Hans": "请提供要删除的文件", en: "Choose the files to delete" },
+  "一次最多刪除 200 個檔案": {
+    "zh-Hans": "一次最多删除 200 个文件",
+    en: "Delete at most 200 files at once",
+  },
 };
 
 export function localizePhrase(message: string, locale: Locale) {
