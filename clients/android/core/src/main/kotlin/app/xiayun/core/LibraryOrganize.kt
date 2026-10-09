@@ -100,6 +100,35 @@ private fun createdMillis(item: CloudItem): Long = try {
 
 private fun taiwanCollator(): Collator = Collator.getInstance(Locale.TAIWAN)
 
+fun assembleShareText(
+    extraText: String?,
+    extraSubject: String?,
+    clipText: String?,
+    clipHtml: String?,
+): String? {
+    fun clean(value: String?): String = value
+        ?.replace("\r\n", "\n")
+        ?.replace('\r', '\n')
+        ?.trim()
+        .orEmpty()
+    val text = clean(extraText)
+    val subject = clean(extraSubject)
+    val clip = clean(clipText)
+    val html = clean(clipHtml)
+    val primary = when {
+        text.isNotEmpty() -> text
+        clip.isNotEmpty() -> clip
+        html.isNotEmpty() -> html
+        else -> ""
+    }
+    if (primary.isEmpty() && subject.isEmpty()) return null
+    if (subject.isEmpty() || primary == subject || primary.contains(subject)) {
+        return primary.ifEmpty { subject }
+    }
+    val urlOnly = firstHttpUrl(primary) == primary
+    return if (urlOnly || primary.isEmpty()) "$subject\n$primary".trim() else "$primary\n$subject"
+}
+
 fun shareNote(raw: String, linkTitle: String, fallbackTitle: String): ShareNote? {
     val body = raw.replace("\r\n", "\n").replace('\r', '\n').trim()
     if (body.isEmpty()) return null

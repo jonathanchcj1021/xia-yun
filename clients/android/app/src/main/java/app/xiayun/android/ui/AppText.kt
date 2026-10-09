@@ -3,6 +3,7 @@ package app.xiayun.android.ui
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import app.xiayun.core.ApiError
 import app.xiayun.core.BaseUrls
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -648,6 +649,16 @@ fun knownMessage(message: String, copy: AppCopy): String {
         "無法讀取這個檔案" to copy.cannotRead,
     )
     return table[message] ?: message
+}
+
+fun formatShareError(error: ApiError, copy: AppCopy): String {
+    val message = knownMessage(error.message, copy).trim()
+    val code = error.code?.trim().orEmpty()
+    return when {
+        code.isEmpty() -> message
+        message.isEmpty() -> code
+        else -> "$code: $message"
+    }
 }
 
 fun copyFor(lang: AppLang) = when (lang) {

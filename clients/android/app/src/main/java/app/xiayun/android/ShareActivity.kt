@@ -2,6 +2,7 @@ package app.xiayun.android
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -22,7 +23,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,7 +34,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import app.xiayun.android.ui.LanguageSwitcher
 import app.xiayun.android.ui.LocalAppCopy
 import app.xiayun.android.ui.LocalAppLang
@@ -40,17 +46,21 @@ import app.xiayun.android.ui.ReadUpload
 import app.xiayun.android.ui.XiaYunTheme
 import app.xiayun.android.ui.copyFor
 import app.xiayun.android.ui.displayGroup
-import app.xiayun.android.ui.knownMessage
+import app.xiayun.android.ui.formatShareError
 import app.xiayun.android.ui.readAppLang
 import app.xiayun.android.ui.readUpload
 import app.xiayun.android.ui.safeScreenPadding
 import app.xiayun.android.ui.writeAppLang
+import app.xiayun.core.ApiError
 import app.xiayun.core.ApiResult
+import app.xiayun.core.AuthSession
 import app.xiayun.core.MAX_GROUP_CHARS
 import app.xiayun.core.UNGROUPED_LABEL
+import app.xiayun.core.assembleShareText
 import app.xiayun.core.canonicalGroup
 import app.xiayun.core.libraryGroupNames
 import app.xiayun.core.shareNote
+import app.xiayun.core.shareSession
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -100,8 +110,8 @@ fun incomingShare(intent: Intent): IncomingShare {
         val uri = streamUri(intent) ?: return IncomingShare.Unsupported
         return IncomingShare.Image(uri)
     }
-    if (type == "text/plain") {
-        val text = textExtra(intent) ?: return IncomingShare.Unsupported
+    val text = sharePayload(intent)
+    if (text != null && (type.isEmpty() || type == "text/plain" || type.startsWith("text/"))) {
         return IncomingShare.Text(text)
     }
     return IncomingShare.Unsupported
@@ -117,7 +127,19 @@ private fun ShareScreen(
     val copy = LocalAppCopy.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val session = remember { container.sessionStore.readPlain() }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var storedSession by remember { mutableStateOf(container.sessionStore.readPlain()) }
+    val liveSession by container.session.collectAsState()
+    val session = shareSession(liveSession, storedSession)
+    DisposableEffect(lifecycleOwner, container) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                storedSession = container.sessionStore.readPlain()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     var groups by remember { mutableStateOf(listOf(UNGROUPED_LABEL)) }
     var selected by remember { mutableStateOf(UNGROUPED_LABEL) }
     var custom by remember { mutableStateOf("") }
@@ -132,11 +154,8 @@ private fun ShareScreen(
         when (val listed = container.api().listItems(current)) {
             is ApiResult.Ok -> groups = libraryGroupNames(listed.value)
             is ApiResult.Err -> {
-                if (listed.error.status == 401) {
-                    error = copy.sessionExpired
-                } else {
-                    groupsFailed = true
-                }
+                error = formatShareError(listed.error, copy)
+                if (listed.error.status != 401) groupsFailed = true
             }
         }
     }
@@ -155,6 +174,7 @@ private fun ShareScreen(
             session == null || !session.hasToken() -> {
                 Text(copy.shareLoginTitle, style = MaterialTheme.typography.titleMedium)
                 Text(copy.shareLoginBody)
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 Button(onClick = onOpenApp, modifier = Modifier.fillMaxWidth()) {
                     Text(copy.shareOpenApp)
                 }
@@ -172,7 +192,6 @@ private fun ShareScreen(
                 }
             }
             else -> {
-                val signedIn = checkNotNull(session)
                 Text(
                     if (incoming is IncomingShare.Image) copy.shareImageLead else copy.shareTextLead,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -217,56 +236,25 @@ private fun ShareScreen(
                             error = copy.groupTooLong
                             return@Button
                         }
+                        val signedIn = shareSession(container.session.value, container.sessionStore.readPlain())
+                        if (signedIn == null) {
+                            storedSession = null
+                            error = formatShareError(
+                                ApiError(401, "UNAUTHENTICATED", copy.shareLoginBody),
+                                copy,
+                            )
+                            return@Button
+                        }
+                        storedSession = signedIn
                         val group = canonicalGroup(if (typed.isEmpty()) selected else typed)
                         error = null
                         saving = true
                         scope.launch {
-                            val result = when (incoming) {
-                                is IncomingShare.Text -> {
-                                    val draft = shareNote(incoming.raw, copy.shareLinkTitle, copy.shareFallbackTitle)
-                                    if (draft == null) {
-                                        ApiResult.Err(
-                                            app.xiayun.core.ApiError(0, "VALIDATION", copy.shareUnsupported),
-                                        )
-                                    } else {
-                                        container.api().createNote(signedIn, draft.title, draft.body, group)
-                                    }
-                                }
-                                is IncomingShare.Image -> {
-                                    val read = withContext(Dispatchers.IO) {
-                                        context.contentResolver.readUpload(
-                                            incoming.uri,
-                                            copy.cannotRead,
-                                            copy.unnamedFile,
-                                        )
-                                    }
-                                    when (read) {
-                                        ReadUpload.TooLarge -> ApiResult.Err(
-                                            app.xiayun.core.ApiError(413, "PAYLOAD_TOO_LARGE", copy.tooLarge),
-                                        )
-                                        is ReadUpload.Failed -> ApiResult.Err(
-                                            app.xiayun.core.ApiError(0, "VALIDATION", read.message),
-                                        )
-                                        is ReadUpload.Ok -> container.api().upload(
-                                            signedIn,
-                                            read.upload.copy(group = group),
-                                        )
-                                    }
-                                }
-                                IncomingShare.Unsupported -> ApiResult.Err(
-                                    app.xiayun.core.ApiError(0, "VALIDATION", copy.shareUnsupported),
-                                )
-                            }
+                            val result = saveIncoming(container, context, copy, incoming, signedIn, group)
                             saving = false
                             when (result) {
                                 is ApiResult.Ok -> saved = true
-                                is ApiResult.Err -> {
-                                    error = if (result.error.status == 401) {
-                                        copy.sessionExpired
-                                    } else {
-                                        knownMessage(result.error.message, copy)
-                                    }
-                                }
+                                is ApiResult.Err -> error = formatShareError(result.error, copy)
                             }
                         }
                     },
@@ -289,17 +277,58 @@ private fun ShareScreen(
 
 @Suppress("DEPRECATION")
 private fun streamUri(intent: Intent): Uri? {
-    val direct = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+    val direct = if (Build.VERSION.SDK_INT >= 33) {
+        intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+    } else {
+        intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
+    }
     if (direct != null) return direct
     val clip = intent.clipData ?: return null
     if (clip.itemCount == 0) return null
     return clip.getItemAt(0).uri
 }
 
-private fun textExtra(intent: Intent): String? {
-    val extra = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.trim()
-    if (!extra.isNullOrEmpty()) return extra
-    val clip = intent.clipData ?: return null
-    if (clip.itemCount == 0) return null
-    return clip.getItemAt(0).text?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+private fun sharePayload(intent: Intent): String? {
+    val clip = intent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)
+    return assembleShareText(
+        extraText = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString(),
+        extraSubject = intent.getCharSequenceExtra(Intent.EXTRA_SUBJECT)?.toString(),
+        clipText = clip?.text?.toString(),
+        clipHtml = clip?.htmlText,
+    )
+}
+
+private suspend fun saveIncoming(
+    container: AppContainer,
+    context: android.content.Context,
+    copy: app.xiayun.android.ui.AppCopy,
+    incoming: IncomingShare,
+    signedIn: AuthSession,
+    group: String?,
+): ApiResult<app.xiayun.core.CloudItem> = when (incoming) {
+    is IncomingShare.Text -> {
+        val draft = shareNote(incoming.raw, copy.shareLinkTitle, copy.shareFallbackTitle)
+        val title = draft?.title?.trim().orEmpty().ifBlank { copy.shareFallbackTitle.trim() }
+        val body = draft?.body.orEmpty()
+        if (draft == null || title.isEmpty()) {
+            ApiResult.Err(ApiError(0, "VALIDATION", copy.shareUnsupported))
+        } else {
+            container.api().createNote(signedIn, title, body, group)
+        }
+    }
+    is IncomingShare.Image -> {
+        val read = withContext(Dispatchers.IO) {
+            context.contentResolver.readUpload(
+                incoming.uri,
+                copy.cannotRead,
+                copy.unnamedFile,
+            )
+        }
+        when (read) {
+            ReadUpload.TooLarge -> ApiResult.Err(ApiError(413, "PAYLOAD_TOO_LARGE", copy.tooLarge))
+            is ReadUpload.Failed -> ApiResult.Err(ApiError(0, "VALIDATION", read.message))
+            is ReadUpload.Ok -> container.api().upload(signedIn, read.upload.copy(group = group))
+        }
+    }
+    IncomingShare.Unsupported -> ApiResult.Err(ApiError(0, "VALIDATION", copy.shareUnsupported))
 }
