@@ -232,6 +232,14 @@ export async function deleteGroup(userId: string, group: string | null) {
   return Number(result.meta?.changes ?? 0);
 }
 
+export async function deleteItems(userId: string, itemIds: string[]) {
+  let deleted = 0;
+  for (const itemId of itemIds) {
+    if (await deleteItem(userId, itemId)) deleted += 1;
+  }
+  return deleted;
+}
+
 export async function deleteItem(userId: string, itemId: string) {
   const existing = await getItem(userId, itemId);
   if (!existing) return false;

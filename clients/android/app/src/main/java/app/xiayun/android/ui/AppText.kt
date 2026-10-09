@@ -161,6 +161,12 @@ data class AppCopy(
     val sessionExpired: String = "工作階段已失效，請重新登入",
     val openProduct: String = "關於匣雲",
     val openFiles: String = "在瀏覽器開啟檔案",
+    val uploadGroupTitle: String = "上傳到哪個分組？",
+    val deleteSelected: String = "刪除所選",
+    val deleteSelectedTitle: String = "刪除這 {count} 個檔案？",
+    val deleteSelectedBody: String = "這 {count} 個檔案會從你的帳號移除，無法復原。",
+    val deleteSelectedDone: String = "已刪除 {count} 個檔案",
+    val selectItem: String = "選取",
     val bioKey: String = "無法建立生物辨識金鑰",
     val bioUnavailable: String = "這台裝置無法使用生物辨識解鎖",
     val bioEnableTitle: String = "啟用生物辨識解鎖",
@@ -404,6 +410,12 @@ private val zhHans = zhHant.copy(
     shareSaving = "正在存进匣云…",
     shareNewGroup = "或输入新分组名称",
     shareGroupsFailed = "读不到现有分组，仍可存到未分组或新名称",
+    uploadGroupTitle = "上传到哪个分组？",
+    deleteSelected = "删除所选",
+    deleteSelectedTitle = "删除这 {count} 个文件？",
+    deleteSelectedBody = "这 {count} 个文件会从你的账号移除，无法恢复。",
+    deleteSelectedDone = "已删除 {count} 个文件",
+    selectItem = "选取",
 )
 
 private val en = AppCopy(
@@ -575,6 +587,12 @@ private val en = AppCopy(
     shareSaving = "Saving to Xia Yun…",
     shareNewGroup = "Or type a new group name",
     shareGroupsFailed = "Existing groups could not be loaded. You can still use Ungrouped or a new name.",
+    uploadGroupTitle = "Which group should these files use?",
+    deleteSelected = "Delete selected",
+    deleteSelectedTitle = "Delete these {count} files?",
+    deleteSelectedBody = "These {count} files leave your account and cannot be restored.",
+    deleteSelectedDone = "Deleted {count} files",
+    selectItem = "Select",
 )
 
 

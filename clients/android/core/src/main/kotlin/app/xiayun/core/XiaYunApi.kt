@@ -143,6 +143,19 @@ class XiaYunApi internal constructor(
         }
     }
 
+    suspend fun deleteItems(session: AuthSession, ids: List<String>): ApiResult<Int> {
+        val payload = buildJsonObject {
+            put("ids", JsonArray(ids.map { JsonPrimitive(it) }))
+        }
+        val builder = authed("/api/items/bulk-delete", session) ?: return badUrl()
+        val raw = execute(builder.post(encode(payload).toRequestBody(JSON)).build())
+        return raw.decode { body ->
+            val value = apiJson.parseToJsonElement(body.text()).jsonObject["deleted"] as? JsonPrimitive
+                ?: error("missing deleted")
+            value.intOrNull ?: value.longOrNull?.toInt() ?: error("missing deleted")
+        }
+    }
+
     suspend fun deleteItem(session: AuthSession, id: String): ApiResult<Unit> {
         val builder = authed("/api/items/$id", session) ?: return badUrl()
         val raw = execute(builder.delete().build())

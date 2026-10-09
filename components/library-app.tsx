@@ -174,6 +174,10 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
   const [noteGroupCustom, setNoteGroupCustom] = useState("");
   const [savingNote, setSavingNote] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Item | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [pendingBulk, setPendingBulk] = useState(false);
+  const [uploadGroup, setUploadGroup] = useState("");
+  const [uploadGroupCustom, setUploadGroupCustom] = useState("");
   const [pendingGroup, setPendingGroup] = useState<{
     key: string;
     label: string;
@@ -307,6 +311,8 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
       );
       const form = new FormData();
       form.set("file", file);
+      const group = chosenNoteGroup(uploadGroup, uploadGroupCustom);
+      if (group) form.set("group", group);
       try {
         const response = await fetch("/api/items", { method: "POST", body: form });
         if (response.status === 401) {
@@ -392,6 +398,41 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
         return;
       }
       setPendingDelete(null);
+      setDeleting(false);
+      await loadItems();
+    } catch {
+      setActionError(copy.deleteFailed);
+      setDeleting(false);
+    }
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+    );
+  }
+
+  async function confirmBulkDelete() {
+    if (selectedIds.length === 0) return;
+    setDeleting(true);
+    setActionError(null);
+    try {
+      const response = await fetch("/api/items/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedIds }),
+      });
+      if (response.status === 401) {
+        goToLogin();
+        return;
+      }
+      if (!response.ok) {
+        setActionError(await errorMessage(response, copy.requestFailed, locale));
+        setDeleting(false);
+        return;
+      }
+      setSelectedIds([]);
+      setPendingBulk(false);
       setDeleting(false);
       await loadItems();
     } catch {
@@ -656,6 +697,18 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
               {copy.dropTitle}
             </div>
             <p className="text-sm leading-6 text-muted-foreground">{copy.dropHint}</p>
+            <NoteGroupField
+              idPrefix="upload"
+              groups={knownGroups}
+              selected={uploadGroup}
+              custom={uploadGroupCustom}
+              onSelected={setUploadGroup}
+              onCustom={setUploadGroupCustom}
+              groupLabel={copy.uploadGroup}
+              newGroupLabel={copy.newGroup}
+              ungroupedLabel={copy.ungrouped}
+              placeholder={copy.newGroupPlaceholder}
+            />
             <input
               ref={fileInputRef}
               type="file"
@@ -700,6 +753,22 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
           <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {actionError}
           </p>
+        ) : null}
+
+        {selectedIds.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-muted-foreground">
+              {fill(copy.selectedCount, { count: selectedIds.length })}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 text-destructive"
+              onClick={() => setPendingBulk(true)}
+            >
+              {copy.deleteSelected}
+            </Button>
+          </div>
         ) : null}
 
         {items && items.length > 0 ? (
@@ -818,6 +887,15 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
                         <li key={item.id}>
                           <article className="rounded-xl bg-card p-3 ring-1 ring-foreground/10 sm:p-4">
                             <div className="flex gap-3">
+                              {item.type === "file" || item.type === "image" ? (
+                                <input
+                                  type="checkbox"
+                                  className="mt-3 size-4 shrink-0"
+                                  checked={selectedIds.includes(item.id)}
+                                  aria-label={fill(copy.selectFile, { name: item.name })}
+                                  onChange={() => toggleSelected(item.id)}
+                                />
+                              ) : null}
                               {item.type === "image" ? (
                                 <button
                                   type="button"
@@ -1050,6 +1128,24 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
         </DialogContent>
       </Dialog>
 
+      <Dialog open={pendingBulk} onOpenChange={(open) => !open && !deleting && setPendingBulk(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{fill(copy.deleteSelectedTitle, { count: selectedIds.length })}</DialogTitle>
+            <DialogDescription>
+              {fill(copy.deleteSelectedBody, { count: selectedIds.length })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingBulk(false)} disabled={deleting}>
+              {copy.cancel}
+            </Button>
+            <Button variant="destructive" onClick={() => void confirmBulkDelete()} disabled={deleting}>
+              {deleting ? copy.deleting : copy.deleteSelected}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={Boolean(pendingDelete)} onOpenChange={(open) => !open && setPendingDelete(null)}>
         <DialogContent>
           <DialogHeader>
