@@ -99,3 +99,18 @@ private fun createdMillis(item: CloudItem): Long = try {
 }
 
 private fun taiwanCollator(): Collator = Collator.getInstance(Locale.TAIWAN)
+
+fun shareNote(raw: String, linkTitle: String, fallbackTitle: String): ShareNote? {
+    val body = raw.replace("\r\n", "\n").replace('\r', '\n').trim()
+    if (body.isEmpty()) return null
+    val url = firstHttpUrl(body)
+    val title = if (url != null && body == url) {
+        linkTitle
+    } else {
+        val line = body.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() }.orEmpty()
+        val clipped = line.take(Limits.MAX_NOTE_TITLE).trim()
+        if (clipped.isEmpty()) fallbackTitle else clipped
+    }
+    val safeTitle = title.trim().take(Limits.MAX_NOTE_TITLE).ifBlank { fallbackTitle }
+    return ShareNote(safeTitle, body)
+}

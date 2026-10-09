@@ -90,6 +90,7 @@ fun LibraryScreen(
     biometricAvailable: Boolean,
     onRefresh: () -> Unit,
     onUpload: (List<Upload>) -> Unit,
+    onDeleteMany: (List<String>) -> Unit,
     onCreateNote: (String, String, String?) -> Unit,
     onUpdateNote: (String, String, String, String?) -> Unit,
     onAddTag: (CloudItem, String) -> Unit,
@@ -124,6 +125,15 @@ fun LibraryScreen(
     var noteCustomName by remember { mutableStateOf("") }
     var noteGroupMenu by remember { mutableStateOf(false) }
     var noteError by remember { mutableStateOf<String?>(null) }
+    var pendingUploads by remember { mutableStateOf<List<Upload>?>(null) }
+    var uploadGroup by remember { mutableStateOf<String?>(null) }
+    var uploadGroupName by remember { mutableStateOf("") }
+    fun stageUploads(uploads: List<Upload>) {
+        if (uploads.isEmpty()) return
+        uploadGroup = null
+        uploadGroupName = ""
+        pendingUploads = uploads
+    }
     val openFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         scope.launch {
             val uploads = mutableListOf<Upload>()
@@ -140,7 +150,7 @@ fun LibraryScreen(
                     }
                 }
             }
-            onUpload(uploads)
+            stageUploads(uploads)
         }
     }
     val openImages = rememberLauncherForActivityResult(
@@ -161,8 +171,51 @@ fun LibraryScreen(
                     }
                 }
             }
-            onUpload(uploads)
+            stageUploads(uploads)
         }
+    }
+
+    val waiting = pendingUploads
+    if (waiting != null) {
+        AlertDialog(
+            onDismissRequest = { pendingUploads = null },
+            title = { Text(copy.uploadGroupTitle) },
+            text = {
+                Column(
+                    Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    libraryGroupNames(state.items.orEmpty()).forEach { name ->
+                        val chosen = canonicalGroup(name)
+                        val selected = uploadGroupName.isBlank() && canonicalGroup(uploadGroup) == chosen
+                        TextButton(onClick = {
+                            uploadGroup = chosen
+                            uploadGroupName = ""
+                        }) {
+                            Text(if (selected) "● ${displayGroup(name, copy)}" else displayGroup(name, copy))
+                        }
+                    }
+                    OutlinedTextField(
+                        value = uploadGroupName,
+                        onValueChange = { uploadGroupName = it },
+                        label = { Text(copy.newGroup) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val typed = uploadGroupName.trim()
+                    val group = canonicalGroup(if (typed.isNotEmpty()) typed else uploadGroup)
+                    onUpload(waiting.map { it.copy(group = group) })
+                    pendingUploads = null
+                }) { Text(copy.save) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingUploads = null }) { Text(copy.cancel) }
+            },
+        )
     }
 
     val detail = state.detail
@@ -341,6 +394,7 @@ fun LibraryScreen(
                     updatingId = state.updatingId,
                     onOpen = onOpen,
                     onDelete = onAskDelete,
+                    onDeleteMany = onDeleteMany,
                     onDeleteGroup = onAskDeleteGroup,
                     onAddTag = onAddTag,
                     onRemoveTag = onRemoveTag,

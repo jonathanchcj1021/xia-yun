@@ -50,8 +50,9 @@ npm run dev
 | GET | `/api/items/[id]/content` | 下載或內嵌圖片。`?disposition=attachment` 強制下載。 |
 | DELETE | `/api/items` | JSON `{ "group": string \| null }`。`null` 或 `""` 刪除這個帳號的未分組項目；其他字串只刪該分組。檔案與圖片的內容一併刪除。回 `{ "deleted": number }`。未登入 `401`。 |
 | DELETE | `/api/items/[id]` | 刪除自己的項目與檔案內容。 |
+| POST | `/api/items/bulk-delete` | JSON `{ "ids": string[] }`。只刪登入者自己的項目，最多 200 個。回 `{ "deleted": number }`。 |
 
-上傳欄位：`file`（必填）、`name`（選填，顯示名稱）、`type`（選填，`file` 或 `image`）。未指定類型時，可預覽的點陣圖（JPEG、PNG、GIF、WebP、AVIF、BMP）會存成 `image`，其餘（含 SVG）存成 `file`。
+上傳欄位：`file`（必填）、`name`（選填，顯示名稱）、`type`（選填，`file` 或 `image`）、`group`（選填，空白或未分組表示不歸類）。未指定類型時，可預覽的點陣圖（JPEG、PNG、GIF、WebP、AVIF、BMP）會存成 `image`，其餘（含 SVG）存成 `file`。
 
 ## 之後的原生客戶端要注意
 
@@ -68,7 +69,13 @@ npm run dev
 - 登出只作廢目前這顆 cookie，或請求裡的 Bearer token 對應的工作階段。其他裝置保持登入。
 - 清單一次回傳全部項目，沒有分頁。時間是 UTC 的 ISO 8601 字串（`createdAt`）。
 - 圖片預覽用 `GET /api/items/[id]/content`（預設 inline）。下載加上 `?disposition=attachment`。
-- 沒有分享 API。沒有原生 App。
+- 沒有把項目分享給其他帳號的 API。
+
+## 從其他 App 存進匣雲
+
+Android 的分享畫面接受系統分享單上的 `text/plain` 與 `image/*`。文字和網址存成筆記，圖片走原本的上傳，點陣圖存成圖片項目。儲存前要先登入，並選擇既有分組、未分組，或輸入新分組名稱。
+
+iOS 的 Share Extension 在 `clients/ios/XiaYunShare`，接受文字、網址與圖片，規則相同。主 App 與擴充功能共用鑰匙圈存取群組 `group.app.xiayun.ios`，所以既有登入要在裝了這個版本的匣雲裡打開一次，分享畫面才讀得到。這個目錄還沒有簽章與開發團隊，這裡不能產出可安裝的 iOS 套件。
 
 ## Windows 命令列（cmd）
 

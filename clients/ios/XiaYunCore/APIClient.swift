@@ -77,9 +77,14 @@ final class APIClient {
         return try decode(ItemListEnvelope.self, from: data).items
     }
 
-    func createNote(title: String, body: String) async throws -> CloudItem {
+    func createNote(title: String, body: String, group: String? = nil) async throws -> CloudItem {
         let note = try NoteRules.validated(title: title, body: body)
-        let payload = NotePayload(type: "text", title: note.title, body: note.body)
+        let payload = NotePayload(
+            type: "text",
+            title: note.title,
+            body: note.body,
+            group: ShareDraft.canonicalGroup(group)
+        )
         let request = try makeRequest(
             path: "/api/items",
             method: "POST",
@@ -92,7 +97,13 @@ final class APIClient {
         return try decode(ItemEnvelope.self, from: data).item
     }
 
-    func upload(data: Data, filename: String, mimeType: String, type: UploadType?) async throws -> CloudItem {
+    func upload(
+        data: Data,
+        filename: String,
+        mimeType: String,
+        type: UploadType?,
+        group: String? = nil
+    ) async throws -> CloudItem {
         if data.count > Limits.maxUploadBytes {
             throw APIError.fileTooLarge
         }
@@ -106,7 +117,8 @@ final class APIClient {
             mimeType: mime,
             fileData: data,
             name: filename,
-            type: resolvedType
+            type: resolvedType,
+            group: ShareDraft.canonicalGroup(group)
         )
         var request = try makeRequest(
             path: "/api/items",
@@ -340,6 +352,22 @@ private struct NotePayload: Encodable {
     var type: String
     var title: String
     var body: String
+    var group: String?
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(type, forKey: .type)
+        try container.encode(title, forKey: .title)
+        try container.encode(body, forKey: .body)
+        try container.encodeIfPresent(group, forKey: .group)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case type
+        case title
+        case body
+        case group
+    }
 }
 
 private struct PasskeyVerifyPayload: Encodable {

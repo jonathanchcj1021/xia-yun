@@ -328,6 +328,36 @@ class XiaYunApiTest {
     }
 
     @Test
+    fun shareSaveSendsGroupOnlyWhenNamed() = runBlocking {
+        val session = AuthSession(token = "tok")
+        val item = """{"item":{"id":"9","type":"text","name":"連結","size":1,"createdAt":"2026-10-01T00:00:00Z","body":"https://example.com"}}"""
+        server.enqueue(MockResponse().setResponseCode(201).setBody(item))
+        server.enqueue(MockResponse().setResponseCode(201).setBody(item.replace("text", "image")))
+        server.enqueue(MockResponse().setResponseCode(201).setBody(item))
+
+        val named = api().createNote(session, "連結", "https://example.com", " 旅行 ") as ApiResult.Ok
+        assertEquals("連結", named.value.name)
+        val noteCall = server.takeRequest()
+        val noteBody = apiJson.parseToJsonElement(noteCall.body.readUtf8()).jsonObject
+        assertEquals("旅行", noteBody.optString("group"))
+        assertNull(noteBody["tags"])
+
+        val uploaded = api().upload(
+            session,
+            Upload("圖.png", "圖.png", "image/png", byteArrayOf(1, 2, 3), group = "未分組"),
+        ) as ApiResult.Ok
+        assertEquals("image", uploaded.value.type)
+        val uploadCall = server.takeRequest()
+        val raw = uploadCall.body.readUtf8()
+        assertTrue(raw.contains("name=\"file\""))
+        assertFalse(raw.contains("name=\"group\""))
+
+        api().createNote(session, "分享", "一段文字", "")
+        val plain = apiJson.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+        assertNull(plain["group"])
+    }
+
+    @Test
     fun badUrlAndUnreachableHost() = runBlocking {
         val bad = XiaYunApi("ftp://nope").login("a@b.co", "password123") as ApiResult.Err
         assertEquals(ClientMessages.BAD_URL, bad.error.message)

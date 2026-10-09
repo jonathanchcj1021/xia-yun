@@ -143,6 +143,19 @@ class XiaYunApi internal constructor(
         }
     }
 
+    suspend fun deleteItems(session: AuthSession, ids: List<String>): ApiResult<Int> {
+        val payload = buildJsonObject {
+            put("ids", JsonArray(ids.map { JsonPrimitive(it) }))
+        }
+        val builder = authed("/api/items/bulk-delete", session) ?: return badUrl()
+        val raw = execute(builder.post(encode(payload).toRequestBody(JSON)).build())
+        return raw.decode { body ->
+            val value = apiJson.parseToJsonElement(body.text()).jsonObject["deleted"] as? JsonPrimitive
+                ?: error("missing deleted")
+            value.intOrNull ?: value.longOrNull?.toInt() ?: error("missing deleted")
+        }
+    }
+
     suspend fun deleteItem(session: AuthSession, id: String): ApiResult<Unit> {
         val builder = authed("/api/items/$id", session) ?: return badUrl()
         val raw = execute(builder.delete().build())
@@ -166,7 +179,12 @@ class XiaYunApi internal constructor(
         }
     }
 
-    suspend fun createNote(session: AuthSession, title: String, body: String): ApiResult<CloudItem> {
+    suspend fun createNote(
+        session: AuthSession,
+        title: String,
+        body: String,
+        group: String? = null,
+    ): ApiResult<CloudItem> {
         val trimmed = title.trim()
         if (trimmed.isEmpty()) {
             return ApiResult.Err(ApiError(0, "VALIDATION", ClientMessages.NOTE_TITLE))
@@ -181,6 +199,8 @@ class XiaYunApi internal constructor(
             put("type", "text")
             put("title", trimmed)
             put("body", body)
+            val cleaned = canonicalGroup(group)
+            if (cleaned != null) put("group", cleaned)
         }
         val builder = authed("/api/items", session) ?: return badUrl()
         val raw = execute(builder.post(encode(payload).toRequestBody(JSON)).build())
@@ -215,10 +235,15 @@ class XiaYunApi internal constructor(
         val display = sanitizeFileName(upload.displayName?.takeIf { it.isNotBlank() } ?: filename)
         val mime = normalizeMime(upload.mimeType)
         val type = hintedItemType(mime)
-        val multipart = MultipartBody.Builder()
+        val multipartBuilder = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart("name", display)
             .addFormDataPart("type", type)
+        val cleanedGroup = canonicalGroup(upload.group)
+        if (cleanedGroup != null) {
+            multipartBuilder.addFormDataPart("group", cleanedGroup)
+        }
+        val multipart = multipartBuilder
             .addFormDataPart(
                 "file",
                 filename,
