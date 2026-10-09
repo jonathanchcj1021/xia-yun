@@ -79,6 +79,16 @@ class XiaYunApi internal constructor(
         }
     }
 
+    suspend fun linkPreview(url: String): ApiResult<LinkPreview> {
+        val builder = anonymous("/api/link-preview", mapOf("url" to url)) ?: return badUrl()
+        val raw = execute(builder.get().build())
+        return raw.decode { body ->
+            val preview = apiJson.parseToJsonElement(body.text()).jsonObject["preview"]?.jsonObject
+                ?: error("missing preview")
+            apiJson.decodeFromJsonElement(LinkPreview.serializer(), preview)
+        }
+    }
+
     suspend fun getItem(session: AuthSession, id: String): ApiResult<CloudItem> {
         val builder = authed("/api/items/$id", session) ?: return badUrl()
         val raw = execute(builder.get().build())
@@ -174,6 +184,26 @@ class XiaYunApi internal constructor(
         }
         val builder = authed("/api/items", session) ?: return badUrl()
         val raw = execute(builder.post(encode(payload).toRequestBody(JSON)).build())
+        return raw.decode { parseItem(it.text()) }
+    }
+
+    suspend fun updateNote(session: AuthSession, id: String, title: String, body: String): ApiResult<CloudItem> {
+        val trimmed = title.trim()
+        if (trimmed.isEmpty()) {
+            return ApiResult.Err(ApiError(0, "VALIDATION", ClientMessages.NOTE_TITLE))
+        }
+        if (trimmed.length > Limits.MAX_NOTE_TITLE) {
+            return ApiResult.Err(ApiError(0, "VALIDATION", ClientMessages.NOTE_TITLE_LONG))
+        }
+        if (body.length > Limits.MAX_NOTE_BODY) {
+            return ApiResult.Err(ApiError(0, "VALIDATION", ClientMessages.NOTE_BODY_LONG))
+        }
+        val payload = buildJsonObject {
+            put("title", trimmed)
+            put("body", body)
+        }
+        val builder = authed("/api/items/$id", session) ?: return badUrl()
+        val raw = execute(builder.patch(encode(payload).toRequestBody(JSON)).build())
         return raw.decode { parseItem(it.text()) }
     }
 

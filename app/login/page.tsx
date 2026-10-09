@@ -1,15 +1,18 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { AuthForm } from "@/components/auth-form";
+import { messages } from "@/lib/messages";
+import { requestLocale } from "@/lib/request-locale";
 import { getCurrentUser } from "@/lib/users";
 
-export const metadata: Metadata = {
-  title: "登入 · 匣雲",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const copy = messages[await requestLocale()];
+  return { title: `${copy.loginTitle} · ${copy.brand}` };
+}
 
 export const dynamic = "force-dynamic";
 
 export default async function LoginPage() {
   if (await getCurrentUser()) redirect("/");
-  return <AuthForm mode="login" />;
+  return <AuthForm mode="login" locale={await requestLocale()} />;
 }

@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { contentDisposition, jsonError } from "@/lib/http";
+import { contentDisposition, cryptoErrorResponse, jsonError } from "@/lib/http";
 import { getItem, readBlob } from "@/lib/items";
 import { getCurrentUser } from "@/lib/users";
 import { isUuid } from "@/lib/validators";
@@ -13,7 +13,12 @@ export async function GET(request: NextRequest, context: Context) {
   if (!user) return jsonError(401, "UNAUTHENTICATED", "尚未登入");
   const { id } = await context.params;
   if (!isUuid(id)) return jsonError(404, "NOT_FOUND", "找不到這個項目");
-  const item = await getItem(user.id, id);
+  let item;
+  try {
+    item = await getItem(user.id, id);
+  } catch (error) {
+    return cryptoErrorResponse(error) ?? jsonError(500, "UNAVAILABLE", "暫時無法讀取內容");
+  }
   if (!item) return jsonError(404, "NOT_FOUND", "找不到這個項目");
 
   const forceAttachment =

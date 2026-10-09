@@ -36,6 +36,7 @@ export type ErrorCode =
   | "NOT_FOUND"
   | "PAYLOAD_TOO_LARGE"
   | "UNSUPPORTED_MEDIA"
+  | "UNAVAILABLE"
   | "WEBAUTHN";
 
 export const WEBAUTHN_CHALLENGE_MS = 5 * 60 * 1000;

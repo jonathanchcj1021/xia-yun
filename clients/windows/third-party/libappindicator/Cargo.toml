@@ -1,0 +1,11 @@
+[package]
+name = "libappindicator"
+version = "0.9.0"
+edition = "2021"
+license = "MIT"
+publish = false
+description = "Windows client does not link this Linux GTK crate."
+
+[features]
+backcompat = []
+default = []

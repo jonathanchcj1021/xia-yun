@@ -6,9 +6,9 @@ import androidx.lifecycle.viewModelScope
 import app.xiayun.android.AppContainer
 import app.xiayun.core.ApiResult
 import app.xiayun.core.CloudItem
+import app.xiayun.core.LinkPreview
 import app.xiayun.core.MAX_GROUP_CHARS
 import app.xiayun.core.MAX_TAG_CHARS
-import app.xiayun.core.UNGROUPED_LABEL
 import app.xiayun.core.Upload
 import app.xiayun.core.canonicalGroup
 import app.xiayun.core.normalizeTag
@@ -40,6 +40,7 @@ data class LibraryUiState(
 )
 
 class LibraryViewModel(private val container: AppContainer) : ViewModel() {
+    private fun t() = copyFor(parseAppLang(container.langCode()))
     private val _state = MutableStateFlow(LibraryUiState())
     val state: StateFlow<LibraryUiState> = _state.asStateFlow()
 
@@ -89,6 +90,8 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
+    suspend fun previewLink(url: String): ApiResult<LinkPreview> = container.api().linkPreview(url)
+
     fun createNote(title: String, body: String, group: String?) {
         val session = container.session.value ?: return
         val target = when (val choice = groupChoice(group)) {
@@ -119,14 +122,53 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
                     }
                 }
             }
-            val label = target ?: UNGROUPED_LABEL
+            val label = target ?: t().ungrouped
             _state.update {
                 it.copy(
                     savingNote = false,
                     banner = failure,
-                    notice = if (failure == null) "已把筆記「${title.trim()}」放進「$label」" else null,
+                    notice = if (failure == null) {
+                        fill(t().notePlaced, mapOf("title" to title.trim(), "group" to label))
+                    } else {
+                        null
+                    },
                 )
             }
+            refresh()
+        }
+    }
+
+    fun updateNote(id: String, title: String, body: String, group: String?) {
+        val session = container.session.value ?: return
+        val target = when (val choice = groupChoice(group)) {
+            GroupChoice.Invalid -> return
+            is GroupChoice.Chosen -> choice.name
+        }
+        viewModelScope.launch {
+            _state.update { it.copy(savingNote = true, banner = null, notice = null) }
+            val updated = when (val result = container.api().updateNote(session, id, title, body)) {
+                is ApiResult.Ok -> result.value
+                is ApiResult.Err -> {
+                    if (result.error.status == 401) container.notifyUnauthorized()
+                    _state.update { it.copy(savingNote = false, banner = result.error.message) }
+                    return@launch
+                }
+            }
+            var failure: String? = null
+            if (target != updated.group) {
+                when (val patched = container.api().patchItem(session, id, group = target, setGroup = true)) {
+                    is ApiResult.Ok -> Unit
+                    is ApiResult.Err -> {
+                        if (patched.error.status == 401) {
+                            container.notifyUnauthorized()
+                            _state.update { it.copy(savingNote = false) }
+                            return@launch
+                        }
+                        failure = patched.error.message
+                    }
+                }
+            }
+            _state.update { it.copy(savingNote = false, banner = failure, detail = null) }
             refresh()
         }
     }
@@ -135,19 +177,35 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
         val value = normalizeTag(raw)
         if (value.isEmpty()) return
         if (value.length > MAX_TAG_CHARS) {
-            _state.update { it.copy(notice = "標籤請留在十二個字以內", banner = null) }
+            _state.update { it.copy(notice = t().tagTooLong, banner = null) }
             return
         }
         if (value in item.tags) {
-            _state.update { it.copy(notice = "「${item.name}」已經有標籤「$value」", banner = null) }
+            _state.update {
+                it.copy(notice = fill(t().tagExists, mapOf("name" to item.name, "tag" to value)), banner = null)
+            }
             return
         }
-        patch(item, group = item.group, tags = item.tags + value, setGroup = false, setTags = true, notice = "已為「${item.name}」加上「$value」")
+        patch(
+            item,
+            group = item.group,
+            tags = item.tags + value,
+            setGroup = false,
+            setTags = true,
+            notice = fill(t().tagAdded, mapOf("name" to item.name, "tag" to value)),
+        )
     }
 
     fun removeTag(item: CloudItem, tag: String) {
         if (tag !in item.tags) return
-        patch(item, group = item.group, tags = item.tags - tag, setGroup = false, setTags = true, notice = "已從「${item.name}」移除「$tag」")
+        patch(
+            item,
+            group = item.group,
+            tags = item.tags - tag,
+            setGroup = false,
+            setTags = true,
+            notice = fill(t().tagRemoved, mapOf("name" to item.name, "tag" to tag)),
+        )
     }
 
     fun moveItem(item: CloudItem, group: String?) {
@@ -156,8 +214,15 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
             is GroupChoice.Chosen -> choice.name
         }
         if (canonicalGroup(item.group) == target) return
-        val label = target ?: UNGROUPED_LABEL
-        patch(item, group = target, tags = item.tags, setGroup = true, setTags = false, notice = "已把「${item.name}」移到「$label」")
+        val label = target ?: t().ungrouped
+        patch(
+            item,
+            group = target,
+            tags = item.tags,
+            setGroup = true,
+            setTags = false,
+            notice = fill(t().moved, mapOf("name" to item.name, "group" to label)),
+        )
     }
 
     fun open(item: CloudItem) {
@@ -223,7 +288,10 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
                     state.copy(
                         deleting = false,
                         pendingGroup = null,
-                        notice = "已刪除「${pending.name}」入面 ${result.value} 個項目",
+                        notice = fill(
+                            t().groupDeleted,
+                            mapOf("name" to displayGroup(pending.name, t()), "count" to result.value.toString()),
+                        ),
                         detail = if (state.detail != null && canonicalGroup(state.detail.group) == group) null else state.detail,
                         pendingDelete = state.pendingDelete?.takeUnless { canonicalGroup(it.group) == group },
                         items = state.items?.filterNot { row -> canonicalGroup(row.group) == group },
@@ -270,7 +338,7 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
     private fun groupChoice(group: String?): GroupChoice {
         val raw = group?.trim()?.replace(Regex("\\s+"), " ").orEmpty()
         if (raw.length > MAX_GROUP_CHARS) {
-            _state.update { it.copy(notice = "分組名稱請留在四十個字以內", banner = null) }
+            _state.update { it.copy(notice = t().groupTooLong, banner = null) }
             return GroupChoice.Invalid
         }
         return GroupChoice.Chosen(canonicalGroup(raw))
@@ -328,7 +396,7 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
 
     suspend fun fetchContent(id: String, attachment: Boolean): ApiResult<ByteArray> {
         val session = container.session.value
-            ?: return ApiResult.Err(app.xiayun.core.ApiError(401, "UNAUTHENTICATED", "尚未登入"))
+            ?: return ApiResult.Err(app.xiayun.core.ApiError(401, "UNAUTHENTICATED", t().notSignedIn))
         val result = container.api().content(session, id, attachment)
         if (result is ApiResult.Err && result.error.status == 401) container.notifyUnauthorized()
         return result

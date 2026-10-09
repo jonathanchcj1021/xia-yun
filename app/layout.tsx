@@ -1,5 +1,8 @@
+import type { ReactNode } from "react";
 import type { Metadata, Viewport } from "next";
 import { Noto_Sans_TC } from "next/font/google";
+import { messages } from "@/lib/messages";
+import { requestLocale } from "@/lib/request-locale";
 import "./globals.css";
 
 const noto = Noto_Sans_TC({
@@ -9,10 +12,13 @@ const noto = Noto_Sans_TC({
   variable: "--font-app",
 });
 
-export const metadata: Metadata = {
-  title: "匣雲",
-  description: "同一個帳號裡的檔案、圖片與文字筆記。",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const copy = messages[await requestLocale()];
+  return {
+    title: copy.brand,
+    description: copy.lead,
+  };
+}
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -20,9 +26,10 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const locale = await requestLocale();
   return (
-    <html lang="zh-Hant" className={`${noto.variable} h-full antialiased`}>
+    <html lang={locale} className={`${noto.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

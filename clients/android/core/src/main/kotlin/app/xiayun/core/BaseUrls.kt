@@ -7,7 +7,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 object BaseUrls {
-    const val DEFAULT = "https://macro-important-port-dollar.trycloudflare.com"
+    const val DEFAULT = "https://xia-yun.jonathanchcj1021.workers.dev"
 
     fun normalize(input: String): String? {
         val trimmed = input.trim().trimEnd('/')
@@ -97,25 +97,29 @@ fun formatBytes(bytes: Long): String {
     return String.format(Locale.US, "%.1f MB", bytes / (1024.0 * 1024.0))
 }
 
-private val timestampFormatter: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("M月d日 HH:mm", Locale.TAIWAN)
-
-private val catalogDateFormatter: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("yyyy年M月d日", Locale.TAIWAN)
-
-fun formatTimestamp(iso: String, zone: ZoneId = ZoneId.systemDefault()): String {
+fun formatTimestamp(
+    iso: String,
+    zone: ZoneId = ZoneId.systemDefault(),
+    pattern: String = "M月d日 HH:mm",
+): String {
     if (iso.isBlank()) return ""
+    val locale = if (pattern.contains("月")) Locale.TAIWAN else Locale.ENGLISH
     return try {
-        timestampFormatter.format(Instant.parse(iso).atZone(zone))
+        DateTimeFormatter.ofPattern(pattern, locale).format(Instant.parse(iso).atZone(zone))
     } catch (_: Exception) {
         iso
     }
 }
 
-fun formatCatalogDate(iso: String, zone: ZoneId = ZoneId.systemDefault()): String {
+fun formatCatalogDate(
+    iso: String,
+    zone: ZoneId = ZoneId.systemDefault(),
+    pattern: String = "yyyy年M月d日",
+): String {
     if (iso.isBlank()) return ""
+    val locale = if (pattern.contains("年")) Locale.TAIWAN else Locale.ENGLISH
     return try {
-        catalogDateFormatter.format(Instant.parse(iso).atZone(zone))
+        DateTimeFormatter.ofPattern(pattern, locale).format(Instant.parse(iso).atZone(zone))
     } catch (_: Exception) {
         iso
     }

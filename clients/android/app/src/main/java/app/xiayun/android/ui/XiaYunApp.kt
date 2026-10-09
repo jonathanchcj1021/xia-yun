@@ -16,6 +16,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.xiayun.android.AppContainer
@@ -33,9 +35,20 @@ fun XiaYunApp(
     val appModel: AppViewModel = viewModel(factory = AppViewModel.factory(container))
     val state by appModel.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var lang by remember { mutableStateOf(readAppLang(context)) }
     var passkeyBusy by remember { mutableStateOf(false) }
     var serverFromLibrary by remember { mutableStateOf(false) }
 
+    CompositionLocalProvider(
+        LocalAppCopy provides copyFor(lang),
+        LocalAppLang provides lang,
+        LocalSetLang provides { next ->
+            writeAppLang(context, next)
+            lang = next
+        },
+    ) {
+    val copy = LocalAppCopy.current
     BackHandler(enabled = state.fromLock && state.phase == Phase.SignedOut) {
         appModel.returnToLock()
     }
@@ -49,13 +62,17 @@ fun XiaYunApp(
             onUnlock = {
                 val envelope = container.sessionStore.readEnvelope()
                 if (envelope == null) {
-                    appModel.forgetVault("找不到已儲存的工作階段，請重新登入")
+                    appModel.forgetVault(copy.missingSession)
                 } else {
                     vault.decrypt(
                         envelope = envelope,
                         onSuccess = { session -> appModel.onUnlocked(session) },
                         onError = { message ->
-                            if (message.contains("請改用密碼")) appModel.forgetVault(message) else appModel.showError(message)
+                            if (message == copy.bioChanged || message == copy.bioDecryptFailed) {
+                                appModel.forgetVault(message)
+                            } else {
+                                appModel.showError(message)
+                            }
                         },
                         onCancel = { appModel.usePassword() },
                     )
@@ -98,6 +115,7 @@ fun XiaYunApp(
                 onRefresh = libraryModel::refresh,
                 onUpload = libraryModel::upload,
                 onCreateNote = libraryModel::createNote,
+                onUpdateNote = libraryModel::updateNote,
                 onAddTag = libraryModel::addTag,
                 onRemoveTag = libraryModel::removeTag,
                 onMove = libraryModel::moveItem,
@@ -112,6 +130,7 @@ fun XiaYunApp(
                 onClearBanner = libraryModel::clearBanner,
                 onBanner = libraryModel::showBanner,
                 fetchContent = libraryModel::fetchContent,
+                previewLink = libraryModel::previewLink,
                 onSignOut = appModel::signOut,
                 onToggleBiometric = { enable ->
                     if (!enable) {
@@ -146,8 +165,8 @@ fun XiaYunApp(
         if (vault.canAuthenticate()) {
             AlertDialog(
                 onDismissRequest = appModel::dismissOffer,
-                title = { Text("用生物辨識解鎖？") },
-                text = { Text("下次開啟匣雲時，可以用指紋或臉部辨識還原這次登入，不必再輸入密碼。") },
+                title = { Text(copy.offerTitle) },
+                text = { Text(copy.offerBody) },
                 confirmButton = {
                     TextButton(onClick = {
                         val session = container.session.value
@@ -160,15 +179,16 @@ fun XiaYunApp(
                                 onCancel = {},
                             )
                         }
-                    }) { Text("啟用") }
+                    }) { Text(copy.offerYes) }
                 },
                 dismissButton = {
-                    TextButton(onClick = appModel::dismissOffer) { Text("暫時不要") }
+                    TextButton(onClick = appModel::dismissOffer) { Text(copy.offerNo) }
                 },
             )
         } else {
             LaunchedEffect(Unit) { appModel.dismissOffer() }
         }
+    }
     }
 }
 
@@ -178,11 +198,12 @@ private fun ServerDialog(
     onDismiss: () -> Unit,
     onSave: (String) -> String?,
 ) {
+    val copy = LocalAppCopy.current
     var draft by remember { mutableStateOf(initial) }
     var error by remember { mutableStateOf<String?>(null) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("伺服器位址") },
+        title = { Text(copy.server) },
         text = {
             androidx.compose.foundation.layout.Column {
                 androidx.compose.material3.OutlinedTextField(
@@ -192,7 +213,7 @@ private fun ServerDialog(
                         error = null
                     },
                     singleLine = true,
-                    label = { Text("位址") },
+                    label = { Text(copy.address) },
                 )
                 if (error != null) {
                     Text(error!!, color = androidx.compose.material3.MaterialTheme.colorScheme.error)
@@ -203,8 +224,8 @@ private fun ServerDialog(
             TextButton(onClick = {
                 val problem = onSave(draft)
                 error = problem
-            }) { Text("儲存") }
+            }) { Text(copy.save) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(copy.cancel) } },
     )
 }

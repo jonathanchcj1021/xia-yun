@@ -8,6 +8,8 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import app.xiayun.android.ui.copyFor
+import app.xiayun.android.ui.readAppLang
 import app.xiayun.core.AuthSession
 import app.xiayun.core.BiometricEnvelope
 import app.xiayun.core.SessionCodec
@@ -18,6 +20,7 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 class BiometricVault(private val activity: FragmentActivity) {
+    private fun t() = copyFor(readAppLang(activity))
     fun canAuthenticate(): Boolean {
         val manager = BiometricManager.from(activity)
         return manager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
@@ -37,24 +40,24 @@ class BiometricVault(private val activity: FragmentActivity) {
             try {
                 cipher(Cipher.ENCRYPT_MODE, null)
             } catch (_: Exception) {
-                onError("無法建立生物辨識金鑰")
+                onError(t().bioKey)
                 return
             }
         } catch (_: Exception) {
-            onError("這台裝置無法使用生物辨識解鎖")
+            onError(t().bioUnavailable)
             return
         }
         authenticate(
-            title = "啟用生物辨識解鎖",
-            subtitle = "確認後，下次開啟匣雲會用生物辨識還原這個工作階段",
-            negative = "取消",
+            title = t().bioEnableTitle,
+            subtitle = t().bioEnableSubtitle,
+            negative = t().cancel,
             cipher = cipher,
             onSuccess = {
                 try {
                     val encrypted = cipher.doFinal(SessionCodec.encode(session).toByteArray(Charsets.UTF_8))
                     onSuccess(BiometricEnvelope(iv = cipher.iv, ciphertext = encrypted))
                 } catch (_: Exception) {
-                    onError("無法儲存生物辨識工作階段")
+                    onError(t().bioSaveFailed)
                 }
             },
             onCancel = onCancel,
@@ -72,23 +75,23 @@ class BiometricVault(private val activity: FragmentActivity) {
             cipher(Cipher.DECRYPT_MODE, envelope.iv)
         } catch (_: KeyPermanentlyInvalidatedException) {
             deleteKey()
-            onError("生物辨識已變更，請改用密碼登入")
+            onError(t().bioChanged)
             return
         } catch (_: Exception) {
-            onError("無法讀取已儲存的工作階段")
+            onError(t().bioReadFailed)
             return
         }
         authenticate(
-            title = "解鎖匣雲",
-            subtitle = "使用生物辨識開啟已儲存的工作階段",
-            negative = "改用密碼",
+            title = t().bioUnlockTitle,
+            subtitle = t().bioUnlockSubtitle,
+            negative = t().bioUsePassword,
             cipher = cipher,
             onSuccess = {
                 try {
                     val plain = cipher.doFinal(envelope.ciphertext)
                     onSuccess(SessionCodec.decode(plain.toString(Charsets.UTF_8)))
                 } catch (_: Exception) {
-                    onError("無法解開已儲存的工作階段，請改用密碼登入")
+                    onError(t().bioDecryptFailed)
                 }
             },
             onCancel = onCancel,
@@ -122,7 +125,7 @@ class BiometricVault(private val activity: FragmentActivity) {
                     ) {
                         onCancel()
                     } else {
-                        val text = errString.toString().ifBlank { "生物辨識沒有完成" }
+                        val text = errString.toString().ifBlank { t().bioIncomplete }
                         onError(text)
                     }
                 }
