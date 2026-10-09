@@ -78,6 +78,7 @@ data class Upload(
     val displayName: String?,
     val mimeType: String,
     val bytes: ByteArray,
+    val group: String? = null,
 )
 
 data class ApiError(

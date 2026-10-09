@@ -143,6 +143,19 @@ class XiaYunApi internal constructor(
         }
     }
 
+    suspend fun deleteItems(session: AuthSession, ids: List<String>): ApiResult<Int> {
+        val payload = buildJsonObject {
+            put("ids", JsonArray(ids.map { JsonPrimitive(it) }))
+        }
+        val builder = authed("/api/items/bulk-delete", session) ?: return badUrl()
+        val raw = execute(builder.post(encode(payload).toRequestBody(JSON)).build())
+        return raw.decode { body ->
+            val value = apiJson.parseToJsonElement(body.text()).jsonObject["deleted"] as? JsonPrimitive
+                ?: error("missing deleted")
+            value.intOrNull ?: value.longOrNull?.toInt() ?: error("missing deleted")
+        }
+    }
+
     suspend fun deleteItem(session: AuthSession, id: String): ApiResult<Unit> {
         val builder = authed("/api/items/$id", session) ?: return badUrl()
         val raw = execute(builder.delete().build())
@@ -215,10 +228,13 @@ class XiaYunApi internal constructor(
         val display = sanitizeFileName(upload.displayName?.takeIf { it.isNotBlank() } ?: filename)
         val mime = normalizeMime(upload.mimeType)
         val type = hintedItemType(mime)
-        val multipart = MultipartBody.Builder()
+        val multipartBuilder = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart("name", display)
             .addFormDataPart("type", type)
+        val group = canonicalGroup(upload.group)
+        if (group != null) multipartBuilder.addFormDataPart("group", group)
+        val multipart = multipartBuilder
             .addFormDataPart(
                 "file",
                 filename,

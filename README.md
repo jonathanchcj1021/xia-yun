@@ -50,8 +50,9 @@ npm run dev
 | GET | `/api/items/[id]/content` | 下載或內嵌圖片。`?disposition=attachment` 強制下載。 |
 | DELETE | `/api/items` | JSON `{ "group": string \| null }`。`null` 或 `""` 刪除這個帳號的未分組項目；其他字串只刪該分組。檔案與圖片的內容一併刪除。回 `{ "deleted": number }`。未登入 `401`。 |
 | DELETE | `/api/items/[id]` | 刪除自己的項目與檔案內容。 |
+| POST | `/api/items/bulk-delete` | JSON `{ "ids": string[] }`。只刪登入者自己的項目，最多 200 個。回 `{ "deleted": number }`。 |
 
-上傳欄位：`file`（必填）、`name`（選填，顯示名稱）、`type`（選填，`file` 或 `image`）。未指定類型時，可預覽的點陣圖（JPEG、PNG、GIF、WebP、AVIF、BMP）會存成 `image`，其餘（含 SVG）存成 `file`。
+上傳欄位：`file`（必填）、`name`（選填，顯示名稱）、`type`（選填，`file` 或 `image`）、`group`（選填，空白或未分組表示不歸類）。未指定類型時，可預覽的點陣圖（JPEG、PNG、GIF、WebP、AVIF、BMP）會存成 `image`，其餘（含 SVG）存成 `file`。
 
 ## 之後的原生客戶端要注意
 
