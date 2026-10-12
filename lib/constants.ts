@@ -6,7 +6,7 @@ export const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
 export const SINGLE_UPLOAD_BYTES = 32 * 1024 * 1024;
 /** Multipart boundary and fields sit on top of the file bytes. */
 export const MAX_REQUEST_BYTES = SINGLE_UPLOAD_BYTES + 1024 * 1024;
-/** Plaintext size of one chunked part. Ciphertext stays above R2's 5 MiB minimum. */
+/** Plaintext size of one chunked part. Ciphertext stays above R2's 5 MiB minimum, and every part but the last is the same size. */
 export const UPLOAD_PART_BYTES = 8 * 1024 * 1024;
 export const UPLOAD_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 export const BCRYPT_ROUNDS = 12;

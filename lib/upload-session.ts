@@ -223,7 +223,7 @@ export async function writePart(
           chunkCount: meta.partCount,
         })
       : null;
-  const sealed = await sealPart(plain, partNumber, header, cryptoKey);
+  const sealed = await sealPart(plain, partNumber, meta.partCount, header, cryptoKey);
   const etag = await store.uploadPart(meta.objectKey, meta.r2UploadId, partNumber, sealed);
   const parts = meta.parts.filter((part) => part.partNumber !== partNumber);
   parts.push({ partNumber, etag });

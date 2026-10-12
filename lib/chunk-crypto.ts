@@ -84,18 +84,33 @@ export async function decryptChunk(frame: Uint8Array, index: number, key: Crypto
   }
 }
 
+function prefixFrame(prefix: Uint8Array, frame: Uint8Array) {
+  const sealed = new Uint8Array(prefix.byteLength + frame.byteLength);
+  sealed.set(prefix, 0);
+  sealed.set(frame, prefix.byteLength);
+  return sealed;
+}
+
+/**
+ * R2 requires every part except the last to be the same size.
+ * Part 1 carries the XYC1 header. Later full parts carry an equal-sized
+ * alignment prefix so complete() can assemble the object. The last part
+ * is only its frame and may be shorter.
+ */
 export async function sealPart(
   plain: Uint8Array,
   partNumber: number,
+  partCount: number,
   header: Uint8Array | null,
   key: CryptoKey,
 ) {
   const frame = await encryptChunk(plain, partNumber - 1, key);
-  if (!header) return frame;
-  const sealed = new Uint8Array(header.byteLength + frame.byteLength);
-  sealed.set(header, 0);
-  sealed.set(frame, header.byteLength);
-  return sealed;
+  if (partNumber === 1) {
+    if (!header || header.byteLength !== HEADER_BYTES) throw new FieldCryptoError();
+    return prefixFrame(header, frame);
+  }
+  if (partNumber < partCount) return prefixFrame(new Uint8Array(HEADER_BYTES), frame);
+  return frame;
 }
 
 export class ByteSource {
@@ -180,6 +195,13 @@ export function decryptChunkedStream(header: ChunkHeader, source: ByteSource, ke
       if (index >= header.chunkCount) {
         controller.close();
         return;
+      }
+      if (index > 0 && index < header.chunkCount - 1) {
+        const pad = await source.readExact(HEADER_BYTES);
+        if (!pad) {
+          controller.error(new FieldCryptoError());
+          return;
+        }
       }
       const plainLength = partPlainLength(header.totalPlainSize, header.chunkPlainSize, index + 1);
       const frame = await source.readExact(IV_BYTES + plainLength + TAG_BYTES);

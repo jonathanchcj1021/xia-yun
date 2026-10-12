@@ -267,6 +267,14 @@ describe("upload limit", () => {
     }
     const short = await writePart(store, userId, meta.uploadId, 3, plain.subarray(0, 1), key);
     assert.equal("status" in short && short.status, 400);
+    const storedParts = store.pending.get(meta.objectKey);
+    assert.ok(storedParts);
+    const sizes = [...(storedParts ?? new Map<number, Uint8Array>()).entries()]
+      .sort((left, right) => left[0] - right[0])
+      .map(([, body]) => body.byteLength);
+    assert.equal(sizes.length, 3);
+    assert.equal(sizes[0], sizes[1]);
+    assert.ok(sizes[2] < sizes[0]);
     const finished = await finishUpload(store, userId, meta.uploadId);
     assert.equal("meta" in finished, true);
     const opened = await store.open(meta.objectKey);
@@ -277,6 +285,56 @@ describe("upload limit", () => {
     if (decoded.kind !== "stream") return;
     assert.deepEqual(await readAll(decoded.stream), plain);
     assert.equal(store.pending.size, 0);
+  });
+
+  it("round-trips a file that fills every chunk, with a shorter last part", async () => {
+    const store = memoryStore();
+    const userId = "33333333-3333-4333-8333-333333333333";
+    const plain = bytesOf("abcdefghijkl");
+    const started = await beginUpload(
+      store,
+      {
+        uploadId: "11111111-1111-4111-8111-111111111111",
+        itemId: "22222222-2222-4222-8222-222222222222",
+        userId,
+        name: "even.bin",
+        type: "file",
+        mimeType: "application/octet-stream",
+        size: plain.byteLength,
+        group: null,
+        tags: [],
+        now: 10,
+        partSize: 4,
+      },
+      async () => false,
+    );
+    if (!("meta" in started)) throw new Error("expected session");
+    const key = await testKey();
+    for (let part = 1; part <= started.meta.partCount; part += 1) {
+      const start = (part - 1) * 4;
+      const written = await writePart(
+        store,
+        userId,
+        started.meta.uploadId,
+        part,
+        plain.subarray(start, start + 4),
+        key,
+      );
+      assert.equal("ok" in written, true);
+    }
+    const storedParts = store.pending.get(started.meta.objectKey);
+    const sizes = [...(storedParts ?? new Map<number, Uint8Array>()).entries()]
+      .sort((left, right) => left[0] - right[0])
+      .map(([, body]) => body.byteLength);
+    assert.deepEqual(sizes.slice(0, -1).every((size) => size === sizes[0]), true);
+    assert.ok(sizes[sizes.length - 1] < sizes[0]);
+    const finished = await finishUpload(store, userId, started.meta.uploadId);
+    assert.equal("meta" in finished, true);
+    const opened = await store.open(started.meta.objectKey);
+    if (!opened) throw new Error("missing object");
+    const decoded = await openPlaintext(opened.stream, opened.size, key);
+    if (decoded.kind !== "stream") throw new Error("expected stream");
+    assert.deepEqual(await readAll(decoded.stream), plain);
   });
 
   it("drops an unfinished upload instead of keeping the object", async () => {
