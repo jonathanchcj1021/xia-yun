@@ -211,6 +211,7 @@ data class AppCopy(
     val shareSaving: String = "正在存進匣雲…",
     val shareNewGroup: String = "或輸入新分組名稱",
     val shareGroupsFailed: String = "讀不到現有分組，仍可存到未分組或新名稱",
+    val versionLabel: String = "版本",
 )
 
 private val zhHant = AppCopy(
@@ -597,6 +598,7 @@ private val en = AppCopy(
     deleteSelectedBody = "These {count} files leave your account and cannot be restored.",
     deleteSelectedDone = "Deleted {count} files",
     selectItem = "Select",
+    versionLabel = "Version",
 )
 
 

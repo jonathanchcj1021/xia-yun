@@ -42,6 +42,7 @@ data class LibraryUiState(
     val deleting: Boolean = false,
     val updatingId: String? = null,
     val notice: String? = null,
+    val appVersion: String = "dev",
 )
 
 class LibraryViewModel(private val container: AppContainer) : ViewModel() {
@@ -51,6 +52,16 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
 
     init {
         refresh()
+        loadVersion()
+    }
+
+    private fun loadVersion() {
+        viewModelScope.launch {
+            when (val result = container.api().appVersion()) {
+                is ApiResult.Ok -> _state.update { it.copy(appVersion = result.value) }
+                is ApiResult.Err -> Unit
+            }
+        }
     }
 
     fun refresh() {

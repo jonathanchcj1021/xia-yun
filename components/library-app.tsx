@@ -16,6 +16,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
+import { AppVersion } from "@/components/app-version";
 import { Mark } from "@/components/mark";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -1149,6 +1150,9 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
           </div>
         )}
       </main>
+      <footer className="mx-auto w-full max-w-5xl px-4 pb-[max(5.5rem,env(safe-area-inset-bottom))] pt-2 sm:pb-6">
+        <AppVersion label={copy.versionLabel} />
+      </footer>
 
       <Dialog
         open={noteOpen}

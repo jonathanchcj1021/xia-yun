@@ -153,6 +153,7 @@ export type Copy = {
   selectFile: string;
   pageErrorTitle: string;
   pageErrorBody: string;
+  versionLabel: string;
 };
 
 const zhHant: Copy = {
@@ -308,6 +309,7 @@ const zhHant: Copy = {
   selectFile: "選取 {name}",
   pageErrorTitle: "頁面暫時無法顯示",
   pageErrorBody: "匣雲遇到沒有預期的問題。再試一次，或重新整理瀏覽器。",
+  versionLabel: "版本",
 };
 
 const zhHans: Copy = {
@@ -460,6 +462,7 @@ const zhHans: Copy = {
   selectFile: "选取 {name}",
   pageErrorTitle: "页面暂时无法显示",
   pageErrorBody: "匣云遇到没有预期的问题。再试一次，或重新整理浏览器。",
+  versionLabel: "版本",
 };
 
 const en: Copy = {
@@ -615,6 +618,7 @@ const en: Copy = {
   selectFile: "Select {name}",
   pageErrorTitle: "This page cannot be shown",
   pageErrorBody: "Xia Yun hit an unexpected problem. Try again, or reload the browser.",
+  versionLabel: "Version",
 };
 
 export const messages: Record<Locale, Copy> = {

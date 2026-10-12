@@ -79,6 +79,17 @@ class XiaYunApi internal constructor(
         }
     }
 
+    suspend fun appVersion(): ApiResult<String> {
+        val builder = anonymous("/api/version") ?: return badUrl()
+        val raw = execute(builder.get().build())
+        return raw.decode { body ->
+            val version = apiJson.parseToJsonElement(body.text()).jsonObject["version"]
+                ?.let { element -> (element as? JsonPrimitive)?.contentOrNull }
+                ?: error("missing version")
+            shortAppVersion(version)
+        }
+    }
+
     suspend fun linkPreview(url: String): ApiResult<LinkPreview> {
         val builder = anonymous("/api/link-preview", mapOf("url" to url)) ?: return badUrl()
         val raw = execute(builder.get().build())

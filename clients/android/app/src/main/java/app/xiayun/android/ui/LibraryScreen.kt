@@ -382,6 +382,11 @@ fun LibraryScreen(
                             Icon(Icons.Filled.EditNote, contentDescription = null)
                             Text(LocalAppCopy.current.newNote, modifier = Modifier.padding(start = 6.dp))
                         }
+                        Text(
+                            "${copy.versionLabel} ${state.appVersion}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             },
