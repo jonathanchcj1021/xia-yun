@@ -10,7 +10,7 @@ export function cryptoErrorResponse(error: unknown) {
 
 export function jsonError(status: number, code: ErrorCode, error: string) {
   return NextResponse.json(
-    { error, code },
+    { error, message: error, code },
     { status, headers: { "Cache-Control": "private, no-store" } },
   );
 }

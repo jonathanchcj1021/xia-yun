@@ -1,8 +1,14 @@
 export const SESSION_COOKIE = "session";
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
-export const MAX_UPLOAD_BYTES = 32 * 1024 * 1024;
+/** Product limit: 1 GiB. UI copy says 1 GB. */
+export const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
+/** One Worker request stays small enough to buffer. Larger files use chunked upload. */
+export const SINGLE_UPLOAD_BYTES = 32 * 1024 * 1024;
 /** Multipart boundary and fields sit on top of the file bytes. */
-export const MAX_REQUEST_BYTES = MAX_UPLOAD_BYTES + 1024 * 1024;
+export const MAX_REQUEST_BYTES = SINGLE_UPLOAD_BYTES + 1024 * 1024;
+/** Plaintext size of one chunked part. Ciphertext stays above R2's 5 MiB minimum, and every part but the last is the same size. */
+export const UPLOAD_PART_BYTES = 8 * 1024 * 1024;
+export const UPLOAD_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 export const BCRYPT_ROUNDS = 12;
 export const MAX_EMAIL_LENGTH = 254;
 export const MIN_PASSWORD_LENGTH = 8;

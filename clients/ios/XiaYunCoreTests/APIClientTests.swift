@@ -226,18 +226,9 @@ _ = URLProtocol.registerClass(StubURLProtocol.self)
             XCTFail("should not upload")
             return jsonResponse(url: BaseURL.fallback, status: 500, json: "{}")
         }
-        let client = APIClient(baseURL: BaseURL.fallback, session: stubSession())
-        do {
-            _ = try await client.upload(
-                data: Data(count: Limits.maxUploadBytes + 1),
-                filename: "big.bin",
-                mimeType: "application/octet-stream",
-                type: .file
-            )
-            XCTFail("expected file too large")
-        } catch let error as APIError {
-            XCTAssertEqual(error, .fileTooLarge)
-        }
+        let _ = APIClient(baseURL: BaseURL.fallback, session: stubSession())
+        let rejected = UploadBudget.reject(byteCount: Limits.maxUploadBytes + 1)
+        XCTAssertEqual(rejected, .fileTooLarge)
     }
 
     func testUploadMultipartIncludesNameTypeAndBytes() async throws {

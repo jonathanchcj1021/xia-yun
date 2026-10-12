@@ -1,15 +1,18 @@
 package app.xiayun.android.ui
 
+import android.content.ContentResolver
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import app.xiayun.android.AppContainer
+import app.xiayun.core.ApiError
 import app.xiayun.core.ApiResult
+import app.xiayun.core.AuthSession
+import app.xiayun.core.ChunkedUpload
 import app.xiayun.core.CloudItem
 import app.xiayun.core.LinkPreview
 import app.xiayun.core.MAX_GROUP_CHARS
 import app.xiayun.core.MAX_TAG_CHARS
-import app.xiayun.core.Upload
 import app.xiayun.core.canonicalGroup
 import app.xiayun.core.normalizeTag
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +32,8 @@ data class LibraryUiState(
     val error: String? = null,
     val banner: String? = null,
     val uploading: Boolean = false,
+    val uploadDetail: String? = null,
+    val uploadFraction: Float? = null,
     val savingNote: Boolean = false,
     val detail: CloudItem? = null,
     val detailLoading: Boolean = false,
@@ -37,6 +42,7 @@ data class LibraryUiState(
     val deleting: Boolean = false,
     val updatingId: String? = null,
     val notice: String? = null,
+    val appVersion: String = "dev",
 )
 
 class LibraryViewModel(private val container: AppContainer) : ViewModel() {
@@ -46,6 +52,16 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
 
     init {
         refresh()
+        loadVersion()
+    }
+
+    private fun loadVersion() {
+        viewModelScope.launch {
+            when (val result = container.api().appVersion()) {
+                is ApiResult.Ok -> _state.update { it.copy(appVersion = result.value) }
+                is ApiResult.Err -> Unit
+            }
+        }
     }
 
     fun refresh() {
@@ -65,28 +81,65 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    fun upload(files: List<Upload>) {
+    fun upload(files: List<StagedFile>, resolver: ContentResolver) {
         if (files.isEmpty() || _state.value.uploading) return
         val session = container.session.value ?: return
         viewModelScope.launch {
-            _state.update { it.copy(uploading = true, banner = null) }
+            _state.update { it.copy(uploading = true, banner = null, uploadDetail = null, uploadFraction = null) }
             var failure: String? = null
             for (file in files) {
-                when (val result = container.api().upload(session, file)) {
+                val result = when (file) {
+                    is StagedFile.Small -> {
+                        _state.update { it.copy(uploadDetail = null, uploadFraction = null) }
+                        container.api().upload(session, file.upload)
+                    }
+                    is StagedFile.Large -> uploadLarge(session, file, resolver)
+                }
+                when (result) {
                     is ApiResult.Ok -> Unit
                     is ApiResult.Err -> {
                         if (result.error.status == 401) {
                             container.notifyUnauthorized()
-                            _state.update { it.copy(uploading = false) }
+                            _state.update { it.copy(uploading = false, uploadDetail = null, uploadFraction = null) }
                             return@launch
                         }
-                        failure = result.error.message
+                        failure = formatShareError(result.error, t())
                         break
                     }
                 }
             }
-            _state.update { it.copy(uploading = false, banner = failure) }
+            _state.update { it.copy(uploading = false, banner = failure, uploadDetail = null, uploadFraction = null) }
             refresh()
+        }
+    }
+
+    private suspend fun uploadLarge(
+        session: AuthSession,
+        file: StagedFile.Large,
+        resolver: ContentResolver,
+    ): ApiResult<CloudItem> {
+        val reader = try {
+            SequentialReader.open(resolver, file.uri)
+        } catch (_: Exception) {
+            return ApiResult.Err(ApiError(0, "VALIDATION", t().cannotRead))
+        }
+        return reader.use {
+            container.api().uploadChunked(
+                session,
+                ChunkedUpload(file.filename, file.filename, file.mimeType, file.size, file.group),
+                it::read,
+            ) { sent, total ->
+                val percent = if (total <= 0L) 0 else ((sent * 100) / total).toInt()
+                _state.update { state ->
+                    state.copy(
+                        uploadDetail = fill(
+                            t().uploadChunk,
+                            mapOf("name" to file.filename, "percent" to percent.toString()),
+                        ),
+                        uploadFraction = if (total <= 0L) 0f else sent.toFloat() / total.toFloat(),
+                    )
+                }
+            }
         }
     }
 
@@ -300,6 +353,30 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
                 is ApiResult.Err -> {
                     if (result.error.status == 401) container.notifyUnauthorized()
                     _state.update { it.copy(deleting = false, pendingGroup = null, banner = result.error.message) }
+                }
+            }
+        }
+    }
+
+    fun deleteMany(ids: List<String>) {
+        if (ids.isEmpty() || _state.value.deleting) return
+        val session = container.session.value ?: return
+        val gone = ids.toSet()
+        viewModelScope.launch {
+            _state.update { it.copy(deleting = true, banner = null) }
+            when (val result = container.api().deleteItems(session, ids)) {
+                is ApiResult.Ok -> _state.update {
+                    it.copy(
+                        deleting = false,
+                        detail = if (it.detail?.id in gone) null else it.detail,
+                        pendingDelete = it.pendingDelete?.takeUnless { row -> row.id in gone },
+                        items = it.items?.filterNot { row -> row.id in gone },
+                        notice = fill(t().deleteSelectedDone, mapOf("count" to result.value.toString())),
+                    )
+                }
+                is ApiResult.Err -> {
+                    if (result.error.status == 401) container.notifyUnauthorized()
+                    _state.update { it.copy(deleting = false, banner = result.error.message) }
                 }
             }
         }

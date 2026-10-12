@@ -30,6 +30,7 @@ struct CloudItem: Codable, Equatable, Identifiable {
     var createdAt: Date
     var excerpt: String?
     var body: String?
+    var group: String? = nil
 
     var exportName: String {
         if type == .text, !name.lowercased().hasSuffix(".txt") {

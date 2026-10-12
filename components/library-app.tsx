@@ -16,6 +16,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
+import { AppVersion } from "@/components/app-version";
 import { Mark } from "@/components/mark";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import { MAX_UPLOAD_BYTES } from "@/lib/constants";
+import { chooseUploadMode } from "@/lib/upload-plan";
 import { LinkPreviewCard } from "@/components/link-preview-card";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { MarkdownView } from "@/components/markdown-view";
@@ -128,12 +131,98 @@ function sectionMoment(sortMode: SortMode, list: Item[]) {
 
 async function errorMessage(response: Response, fallback: string, locale: Locale) {
   try {
-    const data = (await response.json()) as { error?: unknown };
-    if (typeof data.error === "string" && data.error) return localizePhrase(data.error, locale);
+    const data = (await response.json()) as {
+      error?: unknown;
+      message?: unknown;
+      code?: unknown;
+    };
+    const raw =
+      typeof data.message === "string" && data.message
+        ? data.message
+        : typeof data.error === "string"
+          ? data.error
+          : "";
+    if (raw) {
+      const localized = localizePhrase(raw, locale);
+      const code = typeof data.code === "string" ? data.code.trim() : "";
+      return code ? `${code}: ${localized}` : localized;
+    }
   } catch {
     /* ignore */
   }
   return fallback;
+}
+
+type UploadPlanResponse = {
+  uploadId: string;
+  partSize: number;
+  partCount: number;
+};
+
+function isUploadPlan(value: unknown): value is UploadPlanResponse {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.uploadId === "string" &&
+    typeof record.partSize === "number" &&
+    Number.isSafeInteger(record.partSize) &&
+    typeof record.partCount === "number" &&
+    Number.isSafeInteger(record.partCount)
+  );
+}
+
+async function discardUpload(uploadId: string) {
+  await fetch(`/api/uploads/${uploadId}`, { method: "DELETE" }).catch(() => undefined);
+}
+
+async function uploadInParts(
+  file: File,
+  group: string | null,
+  onProgress: (percent: number) => void,
+) {
+  const payload: { name: string; mimeType: string; size: number; group?: string } = {
+    name: file.name,
+    mimeType: file.type || "application/octet-stream",
+    size: file.size,
+  };
+  if (group) payload.group = group;
+  const started = await fetch("/api/uploads", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!started.ok) return started;
+  const planValue = (await started.json()) as unknown;
+  if (!isUploadPlan(planValue)) {
+    return new Response(JSON.stringify({ error: "上傳尚未完成", code: "UNAVAILABLE" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  let sent = 0;
+  try {
+    for (let part = 1; part <= planValue.partCount; part += 1) {
+      const length = Math.min(planValue.partSize, file.size - sent);
+      const slice = file.slice(sent, sent + length);
+      const response = await fetch(`/api/uploads/${planValue.uploadId}/parts/${part}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: slice,
+      });
+      if (!response.ok) {
+        await discardUpload(planValue.uploadId);
+        return response;
+      }
+      sent += length;
+      onProgress(file.size === 0 ? 100 : Math.round((sent / file.size) * 100));
+    }
+    const done = await fetch(`/api/uploads/${planValue.uploadId}/complete`, { method: "POST" });
+    if (!done.ok) await discardUpload(planValue.uploadId);
+    return done;
+  } catch (error) {
+    await discardUpload(planValue.uploadId);
+    throw error;
+  }
 }
 
 function fill(template: string, values: Record<string, string | number>) {
@@ -174,6 +263,10 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
   const [noteGroupCustom, setNoteGroupCustom] = useState("");
   const [savingNote, setSavingNote] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Item | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [pendingBulk, setPendingBulk] = useState(false);
+  const [uploadGroup, setUploadGroup] = useState("");
+  const [uploadGroupCustom, setUploadGroupCustom] = useState("");
   const [pendingGroup, setPendingGroup] = useState<{
     key: string;
     label: string;
@@ -300,15 +393,31 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
     setActionError(null);
     for (let index = 0; index < files.length; index += 1) {
       const file = files[index];
+      if (file.size > MAX_UPLOAD_BYTES) {
+        setActionError(copy.tooLarge);
+        break;
+      }
+      const group = chosenNoteGroup(uploadGroup, uploadGroupCustom);
+      const mode = chooseUploadMode(file.size);
       setUploading(
-        files.length > 1
-          ? fill(copy.uploadProgress, { current: index + 1, total: files.length, name: file.name })
-          : fill(copy.uploadOne, { name: file.name }),
+        mode === "chunked"
+          ? fill(copy.uploadChunk, { name: file.name, percent: 0 })
+          : files.length > 1
+            ? fill(copy.uploadProgress, { current: index + 1, total: files.length, name: file.name })
+            : fill(copy.uploadOne, { name: file.name }),
       );
-      const form = new FormData();
-      form.set("file", file);
       try {
-        const response = await fetch("/api/items", { method: "POST", body: form });
+        const response =
+          mode === "chunked"
+            ? await uploadInParts(file, group, (percent) => {
+                setUploading(fill(copy.uploadChunk, { name: file.name, percent }));
+              })
+            : await (async () => {
+                const form = new FormData();
+                form.set("file", file);
+                if (group) form.set("group", group);
+                return fetch("/api/items", { method: "POST", body: form });
+              })();
         if (response.status === 401) {
           goToLogin();
           return;
@@ -392,6 +501,41 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
         return;
       }
       setPendingDelete(null);
+      setDeleting(false);
+      await loadItems();
+    } catch {
+      setActionError(copy.deleteFailed);
+      setDeleting(false);
+    }
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+    );
+  }
+
+  async function confirmBulkDelete() {
+    if (selectedIds.length === 0) return;
+    setDeleting(true);
+    setActionError(null);
+    try {
+      const response = await fetch("/api/items/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedIds }),
+      });
+      if (response.status === 401) {
+        goToLogin();
+        return;
+      }
+      if (!response.ok) {
+        setActionError(await errorMessage(response, copy.requestFailed, locale));
+        setDeleting(false);
+        return;
+      }
+      setSelectedIds([]);
+      setPendingBulk(false);
       setDeleting(false);
       await loadItems();
     } catch {
@@ -656,6 +800,18 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
               {copy.dropTitle}
             </div>
             <p className="text-sm leading-6 text-muted-foreground">{copy.dropHint}</p>
+            <NoteGroupField
+              idPrefix="upload"
+              groups={knownGroups}
+              selected={uploadGroup}
+              custom={uploadGroupCustom}
+              onSelected={setUploadGroup}
+              onCustom={setUploadGroupCustom}
+              groupLabel={copy.uploadGroup}
+              newGroupLabel={copy.newGroup}
+              ungroupedLabel={copy.ungrouped}
+              placeholder={copy.newGroupPlaceholder}
+            />
             <input
               ref={fileInputRef}
               type="file"
@@ -700,6 +856,22 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
           <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {actionError}
           </p>
+        ) : null}
+
+        {selectedIds.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-muted-foreground">
+              {fill(copy.selectedCount, { count: selectedIds.length })}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 text-destructive"
+              onClick={() => setPendingBulk(true)}
+            >
+              {copy.deleteSelected}
+            </Button>
+          </div>
         ) : null}
 
         {items && items.length > 0 ? (
@@ -818,6 +990,15 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
                         <li key={item.id}>
                           <article className="rounded-xl bg-card p-3 ring-1 ring-foreground/10 sm:p-4">
                             <div className="flex gap-3">
+                              {item.type === "file" || item.type === "image" ? (
+                                <input
+                                  type="checkbox"
+                                  className="mt-3 size-4 shrink-0"
+                                  checked={selectedIds.includes(item.id)}
+                                  aria-label={fill(copy.selectFile, { name: item.name })}
+                                  onChange={() => toggleSelected(item.id)}
+                                />
+                              ) : null}
                               {item.type === "image" ? (
                                 <button
                                   type="button"
@@ -969,6 +1150,9 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
           </div>
         )}
       </main>
+      <footer className="mx-auto w-full max-w-5xl px-4 pb-[max(5.5rem,env(safe-area-inset-bottom))] pt-2 sm:pb-6">
+        <AppVersion label={copy.versionLabel} />
+      </footer>
 
       <Dialog
         open={noteOpen}
@@ -1050,6 +1234,24 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
         </DialogContent>
       </Dialog>
 
+      <Dialog open={pendingBulk} onOpenChange={(open) => !open && !deleting && setPendingBulk(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{fill(copy.deleteSelectedTitle, { count: selectedIds.length })}</DialogTitle>
+            <DialogDescription>
+              {fill(copy.deleteSelectedBody, { count: selectedIds.length })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingBulk(false)} disabled={deleting}>
+              {copy.cancel}
+            </Button>
+            <Button variant="destructive" onClick={() => void confirmBulkDelete()} disabled={deleting}>
+              {deleting ? copy.deleting : copy.deleteSelected}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={Boolean(pendingDelete)} onOpenChange={(open) => !open && setPendingDelete(null)}>
         <DialogContent>
           <DialogHeader>

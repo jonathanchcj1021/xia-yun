@@ -77,9 +77,14 @@ final class APIClient {
         return try decode(ItemListEnvelope.self, from: data).items
     }
 
-    func createNote(title: String, body: String) async throws -> CloudItem {
+    func createNote(title: String, body: String, group: String? = nil) async throws -> CloudItem {
         let note = try NoteRules.validated(title: title, body: body)
-        let payload = NotePayload(type: "text", title: note.title, body: note.body)
+        let payload = NotePayload(
+            type: "text",
+            title: note.title,
+            body: note.body,
+            group: ShareDraft.canonicalGroup(group)
+        )
         let request = try makeRequest(
             path: "/api/items",
             method: "POST",
@@ -92,9 +97,27 @@ final class APIClient {
         return try decode(ItemEnvelope.self, from: data).item
     }
 
-    func upload(data: Data, filename: String, mimeType: String, type: UploadType?) async throws -> CloudItem {
+    func upload(
+        data: Data,
+        filename: String,
+        mimeType: String,
+        type: UploadType?,
+        group: String? = nil
+    ) async throws -> CloudItem {
         if data.count > Limits.maxUploadBytes {
             throw APIError.fileTooLarge
+        }
+        if data.count > Limits.singleUploadBytes {
+            return try await uploadChunks(
+                filename: filename,
+                mimeType: mimeType,
+                type: type,
+                group: group,
+                size: data.count,
+                onProgress: nil
+            ) { range in
+                data.subdata(in: range)
+            }
         }
         let mime = RasterMime.normalized(mimeType)
         let resolvedType: UploadType? = {
@@ -106,7 +129,8 @@ final class APIClient {
             mimeType: mime,
             fileData: data,
             name: filename,
-            type: resolvedType
+            type: resolvedType,
+            group: ShareDraft.canonicalGroup(group)
         )
         var request = try makeRequest(
             path: "/api/items",
@@ -119,6 +143,111 @@ final class APIClient {
         let (response, responseData) = try await perform(request)
         try ensureSuccess(response, data: responseData)
         return try decode(ItemEnvelope.self, from: responseData).item
+    }
+
+    func uploadFile(
+        at url: URL,
+        filename: String,
+        mimeType: String,
+        type: UploadType?,
+        group: String? = nil,
+        onProgress: ((Int) -> Void)? = nil
+    ) async throws -> CloudItem {
+        let values = try url.resourceValues(forKeys: [.fileSizeKey])
+        guard let size = values.fileSize else {
+            throw APIError.transport("無法讀取檔案。")
+        }
+        if size > Limits.maxUploadBytes {
+            throw APIError.fileTooLarge
+        }
+        if size <= Limits.singleUploadBytes {
+            let data = try Data(contentsOf: url)
+            return try await upload(
+                data: data,
+                filename: filename,
+                mimeType: mimeType,
+                type: type,
+                group: group
+            )
+        }
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        return try await uploadChunks(
+            filename: filename,
+            mimeType: mimeType,
+            type: type,
+            group: group,
+            size: size,
+            onProgress: onProgress
+        ) { range in
+            let chunk = try handle.read(upToCount: range.count) ?? Data()
+            if chunk.count != range.count {
+                throw APIError.transport("無法讀取檔案。")
+            }
+            return chunk
+        }
+    }
+
+    private func uploadChunks(
+        filename: String,
+        mimeType: String,
+        type: UploadType?,
+        group: String?,
+        size: Int,
+        onProgress: ((Int) -> Void)?,
+        read: (Range<Int>) throws -> Data
+    ) async throws -> CloudItem {
+        let mime = RasterMime.normalized(mimeType)
+        let resolved = type?.rawValue ?? (RasterMime.isRaster(mime) ? UploadType.image.rawValue : UploadType.file.rawValue)
+        let body = try APIJSON.makeEncoder().encode(
+            ChunkStart(name: filename, mimeType: mime, size: size, type: resolved, group: ShareDraft.canonicalGroup(group))
+        )
+        let startRequest = try makeRequest(
+            path: "/api/uploads",
+            method: "POST",
+            body: body,
+            contentType: "application/json",
+            authorized: true
+        )
+        let (startResponse, startData) = try await perform(startRequest)
+        try ensureSuccess(startResponse, data: startData)
+        let plan = try decode(ChunkPlan.self, from: startData)
+        var sent = 0
+        do {
+            for part in 1...plan.partCount {
+                let length = min(plan.partSize, size - sent)
+                let chunk = try read(sent..<(sent + length))
+                var partRequest = try makeRequest(
+                    path: "/api/uploads/\(plan.uploadId)/parts/\(part)",
+                    method: "PUT",
+                    body: chunk,
+                    contentType: "application/octet-stream",
+                    authorized: true
+                )
+                partRequest.timeoutInterval = 180
+                let (partResponse, partData) = try await perform(partRequest)
+                try ensureSuccess(partResponse, data: partData)
+                sent += length
+                onProgress?(size == 0 ? 100 : (sent * 100) / size)
+            }
+            let doneRequest = try makeRequest(
+                path: "/api/uploads/\(plan.uploadId)/complete",
+                method: "POST",
+                authorized: true
+            )
+            let (doneResponse, doneData) = try await perform(doneRequest)
+            try ensureSuccess(doneResponse, data: doneData)
+            return try decode(ItemEnvelope.self, from: doneData).item
+        } catch {
+            if let abort = try? makeRequest(
+                path: "/api/uploads/\(plan.uploadId)",
+                method: "DELETE",
+                authorized: true
+            ) {
+                _ = try? await perform(abort)
+            }
+            throw error
+        }
     }
 
     func item(id: String) async throws -> CloudItem {
@@ -297,14 +426,15 @@ final class APIClient {
             throw APIError.passkeyUnavailable
         }
         let envelope = try? APIJSON.makeDecoder().decode(ErrorEnvelope.self, from: data)
-        let message = envelope?.error ?? Self.fallbackMessage(status: response.statusCode)
+        let text = envelope?.message?.isEmpty == false ? envelope?.message : envelope?.error
+        let message = text ?? Self.fallbackMessage(status: response.statusCode)
         throw APIError.server(status: response.statusCode, code: envelope?.code, message: message)
     }
 
     private static func fallbackMessage(status: Int) -> String {
         switch status {
         case 401: return "尚未登入，或登入已失效。"
-        case 413: return "檔案超過 32 MB 上限。"
+        case 413: return "檔案超過 1 GB 上限。"
         case 415: return "這個上傳格式不被接受。"
         default: return "伺服器回應錯誤（\(status)）。"
         }
@@ -340,6 +470,22 @@ private struct NotePayload: Encodable {
     var type: String
     var title: String
     var body: String
+    var group: String?
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(type, forKey: .type)
+        try container.encode(title, forKey: .title)
+        try container.encode(body, forKey: .body)
+        try container.encodeIfPresent(group, forKey: .group)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case type
+        case title
+        case body
+        case group
+    }
 }
 
 private struct PasskeyVerifyPayload: Encodable {
@@ -365,7 +511,41 @@ private struct ItemListEnvelope: Decodable {
     var items: [CloudItem]
 }
 
+private struct ChunkPlan: Decodable {
+    var uploadId: String
+    var partSize: Int
+    var partCount: Int
+}
+
+private struct ChunkStart: Encodable {
+    var name: String
+    var mimeType: String
+    var size: Int
+    var type: String
+    var group: String?
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(name, forKey: .name)
+        try container.encode(mimeType, forKey: .mimeType)
+        try container.encode(size, forKey: .size)
+        try container.encode(type, forKey: .type)
+        if let group {
+            try container.encode(group, forKey: .group)
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case name
+        case mimeType
+        case size
+        case type
+        case group
+    }
+}
+
 private struct ErrorEnvelope: Decodable {
     var error: String?
+    var message: String?
     var code: String?
 }

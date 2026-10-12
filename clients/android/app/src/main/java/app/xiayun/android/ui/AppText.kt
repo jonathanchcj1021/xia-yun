@@ -3,6 +3,7 @@ package app.xiayun.android.ui
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import app.xiayun.core.ApiError
 import app.xiayun.core.BaseUrls
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -90,6 +91,7 @@ data class AppCopy(
     val biometricOn: String = "啟用生物辨識解鎖",
     val biometricOff: String = "關閉生物辨識解鎖",
     val uploading: String = "正在上傳…",
+    val uploadChunk: String = "正在上傳 {name} {percent}%",
     val savingNoteProgress: String = "正在儲存筆記…",
     val typeFile: String = "檔案",
     val typeImage: String = "圖片",
@@ -116,7 +118,7 @@ data class AppCopy(
     val moveAction: String = "移過去",
     val imageFailed: String = "圖片無法顯示",
     val download: String = "下載",
-    val tooLarge: String = "檔案超過 32 MB 上限",
+    val tooLarge: String = "檔案超過 1 GB 上限",
     val cannotRead: String = "無法讀取這個檔案",
     val search: String = "搜尋名稱或筆記內文",
     val filterType: String = "類型",
@@ -161,6 +163,12 @@ data class AppCopy(
     val sessionExpired: String = "工作階段已失效，請重新登入",
     val openProduct: String = "關於匣雲",
     val openFiles: String = "在瀏覽器開啟檔案",
+    val uploadGroupTitle: String = "上傳到哪個分組？",
+    val deleteSelected: String = "刪除所選",
+    val deleteSelectedTitle: String = "刪除這 {count} 個檔案？",
+    val deleteSelectedBody: String = "這 {count} 個檔案會從你的帳號移除，無法復原。",
+    val deleteSelectedDone: String = "已刪除 {count} 個檔案",
+    val selectItem: String = "選取",
     val bioKey: String = "無法建立生物辨識金鑰",
     val bioUnavailable: String = "這台裝置無法使用生物辨識解鎖",
     val bioEnableTitle: String = "啟用生物辨識解鎖",
@@ -189,6 +197,21 @@ data class AppCopy(
     val dateTimePattern: String = "M月d日 HH:mm",
     val datePattern: String = "yyyy年M月d日",
     val unnamedFile: String = "未命名檔案",
+    val shareTitle: String = "分享到匣雲",
+    val shareLoginTitle: String = "請先登入匣雲",
+    val shareLoginBody: String = "從其他 App 分享前，要先用現有帳號登入匣雲。",
+    val shareOpenApp: String = "打開匣雲",
+    val shareGroupTitle: String = "放到哪個分組？",
+    val shareTextLead: String = "這則文字會存成筆記",
+    val shareImageLead: String = "這張圖片會存成圖片",
+    val shareLinkTitle: String = "連結",
+    val shareFallbackTitle: String = "分享",
+    val shareSaved: String = "已存進匣雲",
+    val shareUnsupported: String = "匣雲只能接收文字、連結或圖片",
+    val shareSaving: String = "正在存進匣雲…",
+    val shareNewGroup: String = "或輸入新分組名稱",
+    val shareGroupsFailed: String = "讀不到現有分組，仍可存到未分組或新名稱",
+    val versionLabel: String = "版本",
 )
 
 private val zhHant = AppCopy(
@@ -279,6 +302,7 @@ private val zhHans = zhHant.copy(
     biometricOn = "启用生物识别解锁",
     biometricOff = "关闭生物识别解锁",
     uploading = "正在上传…",
+    uploadChunk = "正在上传 {name} {percent}%",
     savingNoteProgress = "正在保存笔记…",
     typeFile = "文件",
     typeImage = "图片",
@@ -305,7 +329,7 @@ private val zhHans = zhHant.copy(
     moveAction = "移过去",
     imageFailed = "图片无法显示",
     download = "下载",
-    tooLarge = "文件超过 32 MB 上限",
+    tooLarge = "文件超过 1 GB 上限",
     cannotRead = "无法读取这个文件",
     search = "搜索名称或笔记正文",
     filterType = "类型",
@@ -376,6 +400,26 @@ private val zhHans = zhHant.copy(
     groupDeleteMissing = "服务器尚未提供整组删除",
     unnamedFile = "未命名文件",
     openFiles = "在浏览器打开文件",
+    shareTitle = "分享到匣云",
+    shareLoginTitle = "请先登录匣云",
+    shareLoginBody = "从其他应用分享前，要先用现有账号登录匣云。",
+    shareOpenApp = "打开匣云",
+    shareGroupTitle = "放到哪个分组？",
+    shareTextLead = "这段文字会存成笔记",
+    shareImageLead = "这张图片会存成图片",
+    shareLinkTitle = "链接",
+    shareFallbackTitle = "分享",
+    shareSaved = "已存进匣云",
+    shareUnsupported = "匣云只能接收文字、链接或图片",
+    shareSaving = "正在存进匣云…",
+    shareNewGroup = "或输入新分组名称",
+    shareGroupsFailed = "读不到现有分组，仍可存到未分组或新名称",
+    uploadGroupTitle = "上传到哪个分组？",
+    deleteSelected = "删除所选",
+    deleteSelectedTitle = "删除这 {count} 个文件？",
+    deleteSelectedBody = "这 {count} 个文件会从你的账号移除，无法恢复。",
+    deleteSelectedDone = "已删除 {count} 个文件",
+    selectItem = "选取",
 )
 
 private val en = AppCopy(
@@ -434,6 +478,7 @@ private val en = AppCopy(
     biometricOn = "Turn on biometric unlock",
     biometricOff = "Turn off biometric unlock",
     uploading = "Uploading…",
+    uploadChunk = "Uploading {name} {percent}%",
     savingNoteProgress = "Saving the note…",
     typeFile = "File",
     typeImage = "Picture",
@@ -460,7 +505,7 @@ private val en = AppCopy(
     moveAction = "Move",
     imageFailed = "This picture cannot be shown",
     download = "Download",
-    tooLarge = "The file is over the 32 MB limit",
+    tooLarge = "The file is over the 1 GB limit",
     cannotRead = "Could not read this file",
     search = "Search names or note text",
     filterType = "Type",
@@ -533,6 +578,27 @@ private val en = AppCopy(
     datePattern = "MMM d, yyyy",
     unnamedFile = "Untitled file",
     openFiles = "Open files in the browser",
+    shareTitle = "Share to Xia Yun",
+    shareLoginTitle = "Log in to Xia Yun first",
+    shareLoginBody = "Log in with your existing Xia Yun account before sharing from another app.",
+    shareOpenApp = "Open Xia Yun",
+    shareGroupTitle = "Which group?",
+    shareTextLead = "This text is saved as a note",
+    shareImageLead = "This picture is saved as an image",
+    shareLinkTitle = "Link",
+    shareFallbackTitle = "Share",
+    shareSaved = "Saved to Xia Yun",
+    shareUnsupported = "Xia Yun can accept text, a link, or a picture",
+    shareSaving = "Saving to Xia Yun…",
+    shareNewGroup = "Or type a new group name",
+    shareGroupsFailed = "Existing groups could not be loaded. You can still use Ungrouped or a new name.",
+    uploadGroupTitle = "Which group should these files use?",
+    deleteSelected = "Delete selected",
+    deleteSelectedTitle = "Delete these {count} files?",
+    deleteSelectedBody = "These {count} files leave your account and cannot be restored.",
+    deleteSelectedDone = "Deleted {count} files",
+    selectItem = "Select",
+    versionLabel = "Version",
 )
 
 
@@ -588,6 +654,16 @@ fun knownMessage(message: String, copy: AppCopy): String {
         "無法讀取這個檔案" to copy.cannotRead,
     )
     return table[message] ?: message
+}
+
+fun formatShareError(error: ApiError, copy: AppCopy): String {
+    val message = knownMessage(error.message, copy).trim()
+    val code = error.code?.trim().orEmpty()
+    return when {
+        code.isEmpty() -> message
+        message.isEmpty() -> code
+        else -> "$code: $message"
+    }
 }
 
 fun copyFor(lang: AppLang) = when (lang) {
