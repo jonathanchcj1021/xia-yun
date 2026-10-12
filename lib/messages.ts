@@ -84,6 +84,8 @@ export type Copy = {
   requestFailed: string;
   uploadProgress: string;
   uploadOne: string;
+  uploadChunk: string;
+  tooLarge: string;
   uploadFailed: string;
   saveFailed: string;
   deleteFailed: string;
@@ -226,7 +228,7 @@ const zhHant: Copy = {
   noteDialogLead: "標題會顯示在清單裡。內文用 Markdown 編寫，旁邊是預覽。",
   openLibrary: "進入書庫",
   dropTitle: "把檔案拖到這裡",
-  dropHint: "點陣圖片會顯示預覽。單一檔案上限 32 MB。一次可以拖入多個檔案。",
+  dropHint: "點陣圖片會顯示預覽。單一檔案上限 1 GB。一次可以拖入多個檔案。",
   chooseFile: "選擇檔案",
   registerPasskey: "註冊通行密鑰",
   passkeyReady: "通行密鑰已註冊。下次可以用它登入這個帳號。",
@@ -237,6 +239,8 @@ const zhHant: Copy = {
   requestFailed: "伺服器沒有完成這個請求",
   uploadProgress: "正在上傳 {current}/{total}：{name}",
   uploadOne: "正在上傳 {name}",
+  uploadChunk: "正在上傳 {name} {percent}%",
+  tooLarge: "檔案超過 1 GB 上限",
   uploadFailed: "上傳時無法連線，請稍後再試",
   saveFailed: "儲存筆記時無法連線",
   deleteFailed: "刪除時無法連線",
@@ -376,7 +380,7 @@ const zhHans: Copy = {
   noteDialogLead: "标题会显示在列表里。正文用 Markdown 编写，旁边是预览。",
   openLibrary: "进入书库",
   dropTitle: "把文件拖到这里",
-  dropHint: "点阵图片会显示预览。单个文件上限 32 MB。一次可以拖入多个文件。",
+  dropHint: "点阵图片会显示预览。单个文件上限 1 GB。一次可以拖入多个文件。",
   chooseFile: "选择文件",
   registerPasskey: "注册通行密钥",
   passkeyReady: "通行密钥已注册。下次可以用它登录这个账号。",
@@ -387,6 +391,8 @@ const zhHans: Copy = {
   requestFailed: "服务器没有完成这个请求",
   uploadProgress: "正在上传 {current}/{total}：{name}",
   uploadOne: "正在上传 {name}",
+  uploadChunk: "正在上传 {name} {percent}%",
+  tooLarge: "文件超过 1 GB 上限",
   uploadFailed: "上传时无法连线，请稍后再试",
   saveFailed: "保存笔记时无法连线",
   deleteFailed: "删除时无法连线",
@@ -529,7 +535,7 @@ const en: Copy = {
   noteDialogLead: "The title shows in the list. Write the body in Markdown and check the preview.",
   openLibrary: "Open library",
   dropTitle: "Drop files here",
-  dropHint: "Pictures show a preview. Each file can be up to 32 MB. You can drop more than one.",
+  dropHint: "Pictures show a preview. Each file can be up to 1 GB. You can drop more than one.",
   chooseFile: "Choose a file",
   registerPasskey: "Register a passkey",
   passkeyReady: "Passkey registered. You can use it to log in next time.",
@@ -540,6 +546,8 @@ const en: Copy = {
   requestFailed: "The server did not finish this request",
   uploadProgress: "Uploading {current}/{total}: {name}",
   uploadOne: "Uploading {name}",
+  uploadChunk: "Uploading {name} {percent}%",
+  tooLarge: "The file is over the 1 GB limit",
   uploadFailed: "Could not connect while uploading. Try again later.",
   saveFailed: "Could not connect while saving the note",
   deleteFailed: "Could not connect while deleting",

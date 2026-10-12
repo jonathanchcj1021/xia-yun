@@ -37,6 +37,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import { MAX_UPLOAD_BYTES } from "@/lib/constants";
+import { chooseUploadMode } from "@/lib/upload-plan";
 import { LinkPreviewCard } from "@/components/link-preview-card";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { MarkdownView } from "@/components/markdown-view";
@@ -128,12 +130,98 @@ function sectionMoment(sortMode: SortMode, list: Item[]) {
 
 async function errorMessage(response: Response, fallback: string, locale: Locale) {
   try {
-    const data = (await response.json()) as { error?: unknown };
-    if (typeof data.error === "string" && data.error) return localizePhrase(data.error, locale);
+    const data = (await response.json()) as {
+      error?: unknown;
+      message?: unknown;
+      code?: unknown;
+    };
+    const raw =
+      typeof data.message === "string" && data.message
+        ? data.message
+        : typeof data.error === "string"
+          ? data.error
+          : "";
+    if (raw) {
+      const localized = localizePhrase(raw, locale);
+      const code = typeof data.code === "string" ? data.code.trim() : "";
+      return code ? `${code}: ${localized}` : localized;
+    }
   } catch {
     /* ignore */
   }
   return fallback;
+}
+
+type UploadPlanResponse = {
+  uploadId: string;
+  partSize: number;
+  partCount: number;
+};
+
+function isUploadPlan(value: unknown): value is UploadPlanResponse {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.uploadId === "string" &&
+    typeof record.partSize === "number" &&
+    Number.isSafeInteger(record.partSize) &&
+    typeof record.partCount === "number" &&
+    Number.isSafeInteger(record.partCount)
+  );
+}
+
+async function discardUpload(uploadId: string) {
+  await fetch(`/api/uploads/${uploadId}`, { method: "DELETE" }).catch(() => undefined);
+}
+
+async function uploadInParts(
+  file: File,
+  group: string | null,
+  onProgress: (percent: number) => void,
+) {
+  const payload: { name: string; mimeType: string; size: number; group?: string } = {
+    name: file.name,
+    mimeType: file.type || "application/octet-stream",
+    size: file.size,
+  };
+  if (group) payload.group = group;
+  const started = await fetch("/api/uploads", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!started.ok) return started;
+  const planValue = (await started.json()) as unknown;
+  if (!isUploadPlan(planValue)) {
+    return new Response(JSON.stringify({ error: "上傳尚未完成", code: "UNAVAILABLE" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  let sent = 0;
+  try {
+    for (let part = 1; part <= planValue.partCount; part += 1) {
+      const length = Math.min(planValue.partSize, file.size - sent);
+      const slice = file.slice(sent, sent + length);
+      const response = await fetch(`/api/uploads/${planValue.uploadId}/parts/${part}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: slice,
+      });
+      if (!response.ok) {
+        await discardUpload(planValue.uploadId);
+        return response;
+      }
+      sent += length;
+      onProgress(file.size === 0 ? 100 : Math.round((sent / file.size) * 100));
+    }
+    const done = await fetch(`/api/uploads/${planValue.uploadId}/complete`, { method: "POST" });
+    if (!done.ok) await discardUpload(planValue.uploadId);
+    return done;
+  } catch (error) {
+    await discardUpload(planValue.uploadId);
+    throw error;
+  }
 }
 
 function fill(template: string, values: Record<string, string | number>) {
@@ -304,17 +392,31 @@ export function LibraryApp({ user, locale }: { user: PublicUser; locale: Locale 
     setActionError(null);
     for (let index = 0; index < files.length; index += 1) {
       const file = files[index];
-      setUploading(
-        files.length > 1
-          ? fill(copy.uploadProgress, { current: index + 1, total: files.length, name: file.name })
-          : fill(copy.uploadOne, { name: file.name }),
-      );
-      const form = new FormData();
-      form.set("file", file);
+      if (file.size > MAX_UPLOAD_BYTES) {
+        setActionError(copy.tooLarge);
+        break;
+      }
       const group = chosenNoteGroup(uploadGroup, uploadGroupCustom);
-      if (group) form.set("group", group);
+      const mode = chooseUploadMode(file.size);
+      setUploading(
+        mode === "chunked"
+          ? fill(copy.uploadChunk, { name: file.name, percent: 0 })
+          : files.length > 1
+            ? fill(copy.uploadProgress, { current: index + 1, total: files.length, name: file.name })
+            : fill(copy.uploadOne, { name: file.name }),
+      );
       try {
-        const response = await fetch("/api/items", { method: "POST", body: form });
+        const response =
+          mode === "chunked"
+            ? await uploadInParts(file, group, (percent) => {
+                setUploading(fill(copy.uploadChunk, { name: file.name, percent }));
+              })
+            : await (async () => {
+                const form = new FormData();
+                form.set("file", file);
+                if (group) form.set("group", group);
+                return fetch("/api/items", { method: "POST", body: form });
+              })();
         if (response.status === 401) {
           goToLogin();
           return;

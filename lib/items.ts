@@ -92,6 +92,15 @@ export async function getItem(userId: string, itemId: string) {
   return toItem(row, true);
 }
 
+export async function hasItem(userId: string, itemId: string) {
+  const row = await queryOne<{ id: string }>(
+    "SELECT id FROM items WHERE id = ? AND user_id = ?",
+    itemId,
+    userId,
+  );
+  return Boolean(row);
+}
+
 export async function createTextItem(
   userId: string,
   title: string,
@@ -254,4 +263,34 @@ export async function readBlob(userId: string, itemId: string) {
   const bytes = await getBlob(userId, itemId);
   if (!bytes) throw new Error("找不到檔案內容");
   return Buffer.from(await decryptBytes(bytes));
+}
+
+export async function insertBlobItem(input: {
+  id: string;
+  userId: string;
+  type: "file" | "image";
+  name: string;
+  mimeType: string;
+  size: number;
+  group?: string | null;
+  tags?: string[];
+}) {
+  const now = Date.now();
+  await execute(
+    `INSERT INTO items
+      (id, user_id, type, name, size, mime_type, body, created_at, item_group, tags)
+     VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
+    input.id,
+    input.userId,
+    input.type,
+    input.name,
+    input.size,
+    input.mimeType,
+    now,
+    input.group ?? null,
+    JSON.stringify(input.tags ?? []),
+  );
+  const created = await getItem(input.userId, input.id);
+  if (!created) throw new Error("寫入檔案項目後讀不到資料");
+  return created;
 }

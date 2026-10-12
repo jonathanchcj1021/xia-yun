@@ -269,14 +269,35 @@ final class AppModel: ObservableObject {
                 notice = APIError.fileTooLarge.message
                 return
             }
-            let data = try Data(contentsOf: url)
             let mime = values.contentType?.preferredMIMEType
                 ?? UTType(filenameExtension: url.pathExtension)?.preferredMIMEType
                 ?? "application/octet-stream"
             let type: UploadType = RasterMime.isRaster(mime) ? .image : .file
-            await upload(data: data, filename: url.lastPathComponent, mimeType: mime, type: type)
+            isWorking = true
+            workingTitle = "正在上傳…"
+            defer { isWorking = false }
+            let item = try await client.uploadFile(
+                at: url,
+                filename: url.lastPathComponent,
+                mimeType: mime,
+                type: type
+            ) { percent in
+                Task { @MainActor in
+                    self.workingTitle = "正在上傳 \(percent)%"
+                }
+            }
+            items.removeAll { $0.id == item.id }
+            items.insert(item, at: 0)
+            libraryError = nil
+            selectedItemID = item.id
+        } catch let error as APIError where error.isUnauthenticated {
+            clearLocalSession()
+            phase = .signedOut
+            formError = "登入已失效，請重新登入。"
+        } catch let error as APIError where error == .fileTooLarge {
+            notice = error.message
         } catch {
-            notice = "無法讀取選擇的檔案。"
+            notice = message(for: error)
         }
     }
 

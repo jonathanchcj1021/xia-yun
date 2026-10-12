@@ -216,9 +216,8 @@ pub async fn upload_file(
         return Err("請選擇一個檔案".into());
     }
     if meta.len() > MAX_UPLOAD_BYTES {
-        return Err("檔案超過 32 MB 上限".into());
+        return Err("檔案超過 1 GB 上限".into());
     }
-    let bytes = fs::read(file).map_err(|_| "無法讀取檔案".to_string())?;
     let file_name = name
         .filter(|value| !value.trim().is_empty())
         .or_else(|| {
@@ -227,8 +226,9 @@ pub async fn upload_file(
         })
         .unwrap_or_else(|| "未命名檔案".into());
     let mime = mime_from_name(&file_name);
+    let mut opened = fs::File::open(file).map_err(|_| "無法讀取檔案".to_string())?;
     cloud(&state)?
-        .upload(&file_name, &mime, &bytes, kind.as_deref())
+        .upload_reader(&file_name, &mime, meta.len(), kind.as_deref(), &mut opened)
         .await
         .map_err(|error| error.to_string())
 }

@@ -33,6 +33,14 @@ const phrases: Record<string, { "zh-Hans": string; en: string }> = {
   "標籤格式不正確": { "zh-Hans": "标签格式不正确", en: "That tag is not valid" },
   "上傳請求需要 Content-Length": { "zh-Hans": "上传请求需要 Content-Length", en: "The upload needs Content-Length" },
   "檔案超過 32 MB 上限": { "zh-Hans": "文件超过 32 MB 上限", en: "The file is over the 32 MB limit" },
+  "檔案超過 1 GB 上限": { "zh-Hans": "文件超过 1 GB 上限", en: "The file is over the 1 GB limit" },
+  "單次上傳超過上限，請改用分段上傳": {
+    "zh-Hans": "单次上传超过上限，请改用分段上传",
+    en: "This request is too large. Upload the file in parts",
+  },
+  "分段長度不正確": { "zh-Hans": "分段长度不正确", en: "That part length is wrong" },
+  "找不到這個上傳": { "zh-Hans": "找不到这个上传", en: "This upload was not found" },
+  "上傳尚未完成": { "zh-Hans": "上传尚未完成", en: "The upload is not complete" },
   "無法讀取上傳內容": { "zh-Hans": "无法读取上传内容", en: "Could not read the upload" },
   "請選擇要上傳的檔案": { "zh-Hans": "请选择要上传的文件", en: "Choose a file to upload" },
   "這個檔案不是可預覽的點陣圖片": {

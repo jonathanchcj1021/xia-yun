@@ -9,7 +9,7 @@ object ClientMessages {
     const val PASSKEY_FORMAT = "伺服器回傳的通行密鑰格式無法辨識"
     const val PASSKEY_RESPONSE = "通行密鑰回應格式不正確"
     const val NO_SESSION = "登入沒有回傳工作階段，請稍後再試"
-    const val TOO_LARGE = "檔案超過 32 MB 上限"
+    const val TOO_LARGE = "檔案超過 1 GB 上限"
     const val BAD_URL = "伺服器位址不正確"
     const val NOTE_TITLE = "請填寫筆記標題"
     const val NOTE_TITLE_LONG = "筆記標題最長 200 個字元"
@@ -19,7 +19,8 @@ object ClientMessages {
 }
 
 object Limits {
-    const val MAX_UPLOAD_BYTES = 32L * 1024 * 1024
+    const val MAX_UPLOAD_BYTES = 1024L * 1024 * 1024
+    const val SINGLE_UPLOAD_BYTES = 32L * 1024 * 1024
     const val MIN_PASSWORD = 8
     const val MAX_PASSWORD = 128
     const val MAX_NOTE_TITLE = 200
@@ -80,6 +81,21 @@ data class Upload(
     val bytes: ByteArray,
     val group: String? = null,
 )
+
+data class ChunkedUpload(
+    val filename: String,
+    val displayName: String?,
+    val mimeType: String,
+    val size: Long,
+    val group: String? = null,
+)
+
+fun rejectUploadSize(size: Long): ApiError? {
+    if (size > Limits.MAX_UPLOAD_BYTES) {
+        return ApiError(413, "PAYLOAD_TOO_LARGE", ClientMessages.TOO_LARGE)
+    }
+    return null
+}
 
 data class ShareNote(
     val title: String,

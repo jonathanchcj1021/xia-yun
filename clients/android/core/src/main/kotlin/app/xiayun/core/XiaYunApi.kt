@@ -228,9 +228,84 @@ class XiaYunApi internal constructor(
     }
 
     suspend fun upload(session: AuthSession, upload: Upload): ApiResult<CloudItem> {
-        if (upload.bytes.size.toLong() > Limits.MAX_UPLOAD_BYTES) {
-            return ApiResult.Err(ApiError(413, "PAYLOAD_TOO_LARGE", ClientMessages.TOO_LARGE))
+        rejectUploadSize(upload.bytes.size.toLong())?.let { return ApiResult.Err(it) }
+        return uploadSingle(session, upload)
+    }
+
+    suspend fun uploadChunked(
+        session: AuthSession,
+        upload: ChunkedUpload,
+        readNext: (Int) -> ByteArray,
+        onProgress: (sent: Long, total: Long) -> Unit = { _, _ -> },
+    ): ApiResult<CloudItem> {
+        rejectUploadSize(upload.size)?.let { return ApiResult.Err(it) }
+        if (upload.size < 0) return ApiResult.Err(ApiError(0, "VALIDATION", ClientMessages.GENERIC))
+        val filename = sanitizeFileName(upload.filename)
+        val display = sanitizeFileName(upload.displayName?.takeIf { it.isNotBlank() } ?: filename)
+        val mime = normalizeMime(upload.mimeType)
+        val type = hintedItemType(mime)
+        val payload = buildJsonObject {
+            put("name", display)
+            put("mimeType", mime)
+            put("size", upload.size)
+            put("type", type)
+            val cleaned = canonicalGroup(upload.group)
+            if (cleaned != null) put("group", cleaned)
         }
+        val startBuilder = authed("/api/uploads", session) ?: return badUrl()
+        val started = execute(startBuilder.post(encode(payload).toRequestBody(JSON)).build())
+        if (started is ApiResult.Err) return started
+        val startBody = (started as ApiResult.Ok).value.text()
+        val startJson = try {
+            apiJson.parseToJsonElement(startBody).jsonObject
+        } catch (_: Exception) {
+            return ApiResult.Err(ApiError(started.value.code, null, ClientMessages.GENERIC))
+        }
+        val uploadId = startJson.optString("uploadId")
+        val partSize = (startJson["partSize"] as? JsonPrimitive)?.longOrNull
+        val partCount = (startJson["partCount"] as? JsonPrimitive)?.intOrNull
+        if (uploadId.isNullOrBlank() || partSize == null || partSize <= 0 || partCount == null || partCount <= 0) {
+            return ApiResult.Err(ApiError(started.value.code, null, ClientMessages.GENERIC))
+        }
+        var sent = 0L
+        for (part in 1..partCount) {
+            val length = minOf(partSize, upload.size - sent).toInt()
+            val bytes = try {
+                withContext(Dispatchers.IO) { readNext(length) }
+            } catch (_: Exception) {
+                abortUpload(session, uploadId)
+                return ApiResult.Err(ApiError(0, "VALIDATION", ClientMessages.GENERIC))
+            }
+            if (bytes.size != length) {
+                abortUpload(session, uploadId)
+                return ApiResult.Err(ApiError(0, "VALIDATION", ClientMessages.GENERIC))
+            }
+            val partBuilder = authed("/api/uploads/$uploadId/parts/$part", session) ?: return badUrl()
+            val written = execute(
+                partBuilder.put(bytes.toRequestBody("application/octet-stream".toMediaType())).build(),
+            )
+            if (written is ApiResult.Err) {
+                abortUpload(session, uploadId)
+                return written
+            }
+            sent += length
+            onProgress(sent, upload.size)
+        }
+        val doneBuilder = authed("/api/uploads/$uploadId/complete", session) ?: return badUrl()
+        val done = execute(doneBuilder.post(ByteArray(0).toRequestBody(null)).build())
+        if (done is ApiResult.Err) {
+            abortUpload(session, uploadId)
+            return done
+        }
+        return done.decode { parseItem(it.text()) }
+    }
+
+    private suspend fun abortUpload(session: AuthSession, uploadId: String) {
+        val builder = authed("/api/uploads/$uploadId", session) ?: return
+        execute(builder.delete().build())
+    }
+
+    private suspend fun uploadSingle(session: AuthSession, upload: Upload): ApiResult<CloudItem> {
         val filename = sanitizeFileName(upload.filename)
         val display = sanitizeFileName(upload.displayName?.takeIf { it.isNotBlank() } ?: filename)
         val mime = normalizeMime(upload.mimeType)
@@ -394,7 +469,7 @@ class XiaYunApi internal constructor(
             try {
                 val obj = apiJson.parseToJsonElement(text).jsonObject
                 code = obj.optString("code")
-                message = obj.optString("error")
+                message = obj.optString("message")?.takeIf { it.isNotBlank() } ?: obj.optString("error")
             } catch (_: Exception) {
                 message = null
             }

@@ -50,7 +50,10 @@ npm run dev
 | GET | `/api/items/[id]/content` | 下載或內嵌圖片。`?disposition=attachment` 強制下載。 |
 | DELETE | `/api/items` | JSON `{ "group": string \| null }`。`null` 或 `""` 刪除這個帳號的未分組項目；其他字串只刪該分組。檔案與圖片的內容一併刪除。回 `{ "deleted": number }`。未登入 `401`。 |
 | DELETE | `/api/items/[id]` | 刪除自己的項目與檔案內容。 |
-| POST | `/api/items/bulk-delete` | JSON `{ "ids": string[] }`。只刪登入者自己的項目，最多 200 個。回 `{ "deleted": number }`。 |
+| POST | `/api/uploads` | 開始分段上傳。JSON `{ "name", "mimeType", "size", "type"?, "group"?, "tags"? }`。`size` 為 1…1073741824。回 `{ "uploadId", "partSize", "partCount" }`。 |
+| PUT | `/api/uploads/[id]/parts/[part]` | 上傳一段原始位元組。`part` 從 1 開始。 |
+| POST | `/api/uploads/[id]/complete` | 組裝並建立項目。回 `{ "item" }`。 |
+| DELETE | `/api/uploads/[id]` | 放棄尚未完成的上傳。 |
 
 上傳欄位：`file`（必填）、`name`（選填，顯示名稱）、`type`（選填，`file` 或 `image`）、`group`（選填，空白或未分組表示不歸類）。未指定類型時，可預覽的點陣圖（JPEG、PNG、GIF、WebP、AVIF、BMP）會存成 `image`，其餘（含 SVG）存成 `file`。
 
@@ -62,7 +65,9 @@ npm run dev
 - 挑戰 5 分鐘內有效，而且只能用一次。登入必須帶電子郵件，這個版本不會做無帳號提示的 discoverable 登入。
 - `Secure` 只在 HTTPS 時設定。本機 HTTP 不會加 `Secure`。
 - 這個版本沒有 CORS 標頭。原生 App 不是瀏覽器，不需要 CORS；瀏覽器跨網域呼叫則尚未開放。
-- 單一檔案上限 **32 MB**。整個 multipart 請求不得超過 33 MB，否則 `413` / `PAYLOAD_TOO_LARGE`。`Content-Length` 若存在且不是數字，回 `411`。沒有這個標頭時，伺服器仍會邊讀邊計算，超過 33 MB 就停止。
+- 單一檔案上限 **1 GB**（1 GiB，1073741824 bytes）。32 MB 以內仍用一次 `multipart` 上傳，整個請求不得超過 33 MB，否則 `413` / `PAYLOAD_TOO_LARGE`，訊息是「單次上傳超過上限，請改用分段上傳」。`Content-Length` 若存在且不是數字，回 `411`。沒有這個標頭時，伺服器仍會邊讀邊計算，超過 33 MB 就停止。
+- 大於 32 MB、不超過 1 GB 的檔案改走分段：`POST /api/uploads` JSON `{ "name", "mimeType", "size", "type"?, "group"? }`，回應 `{ "uploadId", "partSize", "partCount" }`。`partSize` 是 8388608 bytes（8 MiB）。依序 `PUT /api/uploads/{uploadId}/parts/{n}`，本體是該段原始位元組，`Content-Type: application/octet-stream`。最後 `POST /api/uploads/{uploadId}/complete`。失敗時 `DELETE /api/uploads/{uploadId}`，未完成的上傳不會留成永久物件。超過 1 GB 回 `413` / `PAYLOAD_TOO_LARGE`，訊息是「檔案超過 1 GB 上限」。錯誤 JSON 同時有 `code`、`message` 與 `error`。
+- 新的大檔在伺服器上逐段用 AES-256-GCM 加密（`XYC1`），下載時逐段解密並串流。32 MB 以內的新檔仍是原本的 `XYE1`。舊的 `XYE1` 與 `enc:v1:` 內容維持可讀，不會重新加密。沒有 magic 的舊檔案仍當成明文。
 - 登入後的 `/files` 依分組瀏覽檔案與圖片（不含筆記），每一列有名稱、大小與上傳時間。
 - 筆記只能用 JSON，不能用 multipart。標題 1–200 字元，內文最多 10 萬字元，內文可以是空字串。
 - 密碼 8–128 字元，由伺服器雜湊。客戶端送原始密碼。
@@ -92,6 +97,20 @@ curl.exe -s -X POST "https://xia-yun.jonathanchcj1021.workers.dev/api/auth/login
 ```bat
 curl.exe -s -X POST "https://xia-yun.jonathanchcj1021.workers.dev/api/items" -H "Authorization: Bearer %TOKEN%" -F "file=@C:\path\to\file.bin"
 ```
+
+32 MB 以內用上面這支。更大、但不超過 1 GB 的檔案要分段。先開始上傳，`partSize` 會是 8388608：
+
+```bat
+curl.exe -s -X POST "https://xia-yun.jonathanchcj1021.workers.dev/api/uploads" -H "Authorization: Bearer %TOKEN%" -H "Content-Type: application/json" -d "{\"name\":\"file.bin\",\"mimeType\":\"application/octet-stream\",\"size\":FILE_SIZE,\"type\":\"file\"}"
+```
+
+再把每一段原始位元組送到 `PUT /api/uploads/%UPLOAD_ID%/parts/1`（下一段是 `2`，以此類推），標頭 `Content-Type: application/octet-stream`。全部送完後：
+
+```bat
+curl.exe -s -X POST "https://xia-yun.jonathanchcj1021.workers.dev/api/uploads/%UPLOAD_ID%/complete" -H "Authorization: Bearer %TOKEN%"
+```
+
+中途失敗就 `DELETE /api/uploads/%UPLOAD_ID%`。超過 1 GB 不會開始上傳。
 
 依 id 下載到本機路徑：
 

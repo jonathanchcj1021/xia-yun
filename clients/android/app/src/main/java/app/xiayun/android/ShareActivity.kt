@@ -42,18 +42,21 @@ import app.xiayun.android.ui.LanguageSwitcher
 import app.xiayun.android.ui.LocalAppCopy
 import app.xiayun.android.ui.LocalAppLang
 import app.xiayun.android.ui.LocalSetLang
-import app.xiayun.android.ui.ReadUpload
+import app.xiayun.android.ui.SequentialReader
+import app.xiayun.android.ui.StageResult
+import app.xiayun.android.ui.StagedFile
 import app.xiayun.android.ui.XiaYunTheme
 import app.xiayun.android.ui.copyFor
 import app.xiayun.android.ui.displayGroup
 import app.xiayun.android.ui.formatShareError
 import app.xiayun.android.ui.readAppLang
-import app.xiayun.android.ui.readUpload
 import app.xiayun.android.ui.safeScreenPadding
+import app.xiayun.android.ui.stageUpload
 import app.xiayun.android.ui.writeAppLang
 import app.xiayun.core.ApiError
 import app.xiayun.core.ApiResult
 import app.xiayun.core.AuthSession
+import app.xiayun.core.ChunkedUpload
 import app.xiayun.core.MAX_GROUP_CHARS
 import app.xiayun.core.UNGROUPED_LABEL
 import app.xiayun.core.assembleShareText
@@ -146,6 +149,7 @@ private fun ShareScreen(
     var groupsFailed by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
+    var progress by remember { mutableStateOf<Int?>(null) }
     var saved by remember { mutableStateOf(false) }
 
     LaunchedEffect(session?.token) {
@@ -249,8 +253,11 @@ private fun ShareScreen(
                         val group = canonicalGroup(if (typed.isEmpty()) selected else typed)
                         error = null
                         saving = true
+                        progress = null
                         scope.launch {
-                            val result = saveIncoming(container, context, copy, incoming, signedIn, group)
+                            val result = saveIncoming(container, context, copy, incoming, signedIn, group) { sent, total ->
+                                progress = if (total <= 0L) 0 else ((sent * 100) / total).toInt()
+                            }
                             saving = false
                             when (result) {
                                 is ApiResult.Ok -> saved = true
@@ -262,7 +269,7 @@ private fun ShareScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     if (saving) {
-                        CircularProgressIndicator()
+                        if (progress != null) Text("${progress}%") else CircularProgressIndicator()
                     } else {
                         Text(if (saving) copy.shareSaving else copy.save)
                     }
@@ -305,6 +312,7 @@ private suspend fun saveIncoming(
     incoming: IncomingShare,
     signedIn: AuthSession,
     group: String?,
+    onProgress: (Long, Long) -> Unit = { _, _ -> },
 ): ApiResult<app.xiayun.core.CloudItem> = when (incoming) {
     is IncomingShare.Text -> {
         val draft = shareNote(incoming.raw, copy.shareLinkTitle, copy.shareFallbackTitle)
@@ -317,17 +325,32 @@ private suspend fun saveIncoming(
         }
     }
     is IncomingShare.Image -> {
-        val read = withContext(Dispatchers.IO) {
-            context.contentResolver.readUpload(
+        val staged = withContext(Dispatchers.IO) {
+            context.contentResolver.stageUpload(
                 incoming.uri,
                 copy.cannotRead,
                 copy.unnamedFile,
             )
         }
-        when (read) {
-            ReadUpload.TooLarge -> ApiResult.Err(ApiError(413, "PAYLOAD_TOO_LARGE", copy.tooLarge))
-            is ReadUpload.Failed -> ApiResult.Err(ApiError(0, "VALIDATION", read.message))
-            is ReadUpload.Ok -> container.api().upload(signedIn, read.upload.copy(group = group))
+        when (staged) {
+            StageResult.TooLarge -> ApiResult.Err(ApiError(413, "PAYLOAD_TOO_LARGE", copy.tooLarge))
+            is StageResult.Failed -> ApiResult.Err(ApiError(0, "VALIDATION", staged.message))
+            is StageResult.Ready -> when (val file = staged.file.let { stagedFile ->
+                when (stagedFile) {
+                    is StagedFile.Small -> stagedFile.copy(upload = stagedFile.upload.copy(group = group))
+                    is StagedFile.Large -> stagedFile.copy(group = group)
+                }
+            }) {
+                is StagedFile.Small -> container.api().upload(signedIn, file.upload)
+                is StagedFile.Large -> SequentialReader.open(context.contentResolver, file.uri).use { reader ->
+                    container.api().uploadChunked(
+                        signedIn,
+                        ChunkedUpload(file.filename, file.filename, file.mimeType, file.size, file.group),
+                        reader::read,
+                        onProgress,
+                    )
+                }
+            }
         }
     }
     IncomingShare.Unsupported -> ApiResult.Err(ApiError(0, "VALIDATION", copy.shareUnsupported))

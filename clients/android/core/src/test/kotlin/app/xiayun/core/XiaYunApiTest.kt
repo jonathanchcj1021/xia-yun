@@ -1,6 +1,7 @@
 package app.xiayun.core
 
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -315,16 +316,61 @@ class XiaYunApiTest {
     @Test
     fun oversizedUploadAndBlankNoteNeverHitTheNetwork() = runBlocking {
         val session = AuthSession(token = "tok")
-        val big = ByteArray(1) // replaced below
-        val tooBig = Upload("a.bin", null, "application/octet-stream", ByteArray(0)).copy(
-            bytes = ByteArray((Limits.MAX_UPLOAD_BYTES + 1).toInt()),
-        )
-        val upload = api().upload(session, tooBig) as ApiResult.Err
-        assertEquals(ClientMessages.TOO_LARGE, upload.error.message)
+        val rejected = rejectUploadSize(Limits.MAX_UPLOAD_BYTES + 1)
+        assertEquals(413, rejected?.status)
+        assertEquals("PAYLOAD_TOO_LARGE", rejected?.code)
+        assertEquals(ClientMessages.TOO_LARGE, rejected?.message)
+        assertEquals(1024L * 1024 * 1024, Limits.MAX_UPLOAD_BYTES)
         val note = api().createNote(session, "  ", "x") as ApiResult.Err
         assertEquals(ClientMessages.NOTE_TITLE, note.error.message)
         assertEquals(0, server.requestCount)
-        assertTrue(big.isNotEmpty() || big.isEmpty())
+    }
+
+    @Test
+    fun chunkedUploadReportsProgressAndServerCode() = runBlocking {
+        val session = AuthSession(token = "tok")
+        val item = """{"item":{"id":"9","type":"file","name":"big.bin","size":10,"createdAt":"2026-10-01T00:00:00Z"}}"""
+        server.enqueue(MockResponse().setResponseCode(201).setBody("""{"uploadId":"11111111-1111-4111-8111-111111111111","partSize":6,"partCount":2}"""))
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"partNumber":1}"""))
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"partNumber":2}"""))
+        server.enqueue(MockResponse().setResponseCode(201).setBody(item))
+        val seen = mutableListOf<Long>()
+        val uploaded = api().uploadChunked(
+            session,
+            ChunkedUpload("big.bin", null, "application/octet-stream", 10, group = "未分組"),
+            { length -> ByteArray(length) { (it + 1).toByte() } },
+        ) { sent, _ -> seen += sent } as ApiResult.Ok
+        assertEquals("big.bin", uploaded.value.name)
+        assertEquals(listOf(6L, 10L), seen)
+        val start = server.takeRequest()
+        assertEquals("POST", start.method)
+        assertEquals("/api/uploads", start.path)
+        val startBody = apiJson.parseToJsonElement(start.body.readUtf8()).jsonObject
+        assertEquals(10, startBody["size"]?.jsonPrimitive?.intOrNull)
+        assertNull(startBody["group"])
+        val first = server.takeRequest()
+        assertEquals("PUT", first.method)
+        assertEquals("/api/uploads/11111111-1111-4111-8111-111111111111/parts/1", first.path)
+        assertEquals(6L, first.body.size)
+        val second = server.takeRequest()
+        assertEquals("/api/uploads/11111111-1111-4111-8111-111111111111/parts/2", second.path)
+        assertEquals(4L, second.body.size)
+        val done = server.takeRequest()
+        assertEquals("POST", done.method)
+        assertTrue(done.path?.endsWith("/complete") == true)
+
+        server.enqueue(
+            MockResponse().setResponseCode(413).setBody(
+                """{"code":"PAYLOAD_TOO_LARGE","message":"檔案超過 1 GB 上限","error":"檔案超過 1 GB 上限"}""",
+            ),
+        )
+        val failed = api().uploadChunked(
+            session,
+            ChunkedUpload("big.bin", null, "application/octet-stream", 10),
+            { ByteArray(it) },
+        ) as ApiResult.Err
+        assertEquals("PAYLOAD_TOO_LARGE", failed.error.code)
+        assertEquals("檔案超過 1 GB 上限", failed.error.message)
     }
 
     @Test

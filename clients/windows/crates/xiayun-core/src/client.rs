@@ -7,7 +7,7 @@ use crate::passkey::{parse_authentication_options, parse_registration_options, A
 use crate::transport::{HttpRequest, RawResponse, Transport};
 use crate::validate::{
     ensure_upload_size, is_uuid, normalize_email, normalize_note_body, normalize_note_title,
-    normalize_password, normalize_upload_type, sanitize_item_name,
+    normalize_password, normalize_upload_type, sanitize_item_name, SINGLE_UPLOAD_BYTES,
 };
 
 pub struct CloudClient<T: Transport> {
@@ -202,7 +202,37 @@ impl<T: Transport> CloudClient<T> {
         bytes: &[u8],
         type_hint: Option<&str>,
     ) -> Result<Item, ClientError> {
-        ensure_upload_size(bytes.len() as u64)?;
+        let mut cursor = std::io::Cursor::new(bytes);
+        self.upload_reader(file_name, mime, bytes.len() as u64, type_hint, &mut cursor)
+            .await
+    }
+
+    pub async fn upload_reader<R: std::io::Read>(
+        &self,
+        file_name: &str,
+        mime: &str,
+        size: u64,
+        type_hint: Option<&str>,
+        reader: &mut R,
+    ) -> Result<Item, ClientError> {
+        ensure_upload_size(size)?;
+        if size <= SINGLE_UPLOAD_BYTES {
+            let mut bytes = vec![0u8; size as usize];
+            reader
+                .read_exact(&mut bytes)
+                .map_err(|_| err("無法讀取檔案"))?;
+            return self.upload_single(file_name, mime, &bytes, type_hint).await;
+        }
+        self.upload_chunked(file_name, mime, size, type_hint, reader).await
+    }
+
+    async fn upload_single(
+        &self,
+        file_name: &str,
+        mime: &str,
+        bytes: &[u8],
+        type_hint: Option<&str>,
+    ) -> Result<Item, ClientError> {
         let name = sanitize_item_name(file_name);
         let mime = crate::validate::normalize_mime(mime);
         let kind = normalize_upload_type(type_hint, &mime)?;
@@ -218,6 +248,94 @@ impl<T: Transport> CloudClient<T> {
             )
             .await?;
         let value = decode_json(&response)?;
+        parse_item(value.get("item").ok_or_else(|| err("伺服器沒有回傳檔案"))?)
+    }
+
+    async fn upload_chunked<R: std::io::Read>(
+        &self,
+        file_name: &str,
+        mime: &str,
+        size: u64,
+        type_hint: Option<&str>,
+        reader: &mut R,
+    ) -> Result<Item, ClientError> {
+        let name = sanitize_item_name(file_name);
+        let mime = crate::validate::normalize_mime(mime);
+        let kind = normalize_upload_type(type_hint, &mime)?;
+        let response = self
+            .request(
+                "POST",
+                "/api/uploads",
+                &self.auth,
+                Some(json!({
+                    "name": name,
+                    "mimeType": mime,
+                    "size": size,
+                    "type": kind,
+                })),
+                &[],
+            )
+            .await?;
+        let value = decode_json(&response)?;
+        let upload_id = required_str(&value, "uploadId")?;
+        let part_size = value
+            .get("partSize")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| err("伺服器回應缺少欄位"))?;
+        let part_count = value
+            .get("partCount")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| err("伺服器回應缺少欄位"))?;
+        if part_size == 0 || part_count == 0 {
+            return Err(err("伺服器回應缺少欄位"));
+        }
+        let mut sent = 0u64;
+        for part in 1..=part_count {
+            let length = part_size.min(size.saturating_sub(sent)) as usize;
+            let mut buffer = vec![0u8; length];
+            if reader.read_exact(&mut buffer).is_err() {
+                let _ = self
+                    .request("DELETE", &format!("/api/uploads/{upload_id}"), &self.auth, None, &[])
+                    .await;
+                return Err(err("無法讀取檔案"));
+            }
+            let written = self
+                .request_bytes(
+                    "PUT",
+                    &format!("/api/uploads/{upload_id}/parts/{part}"),
+                    &self.auth,
+                    "application/octet-stream",
+                    buffer,
+                    &[],
+                )
+                .await;
+            match written {
+                Ok(response) if (200..300).contains(&response.status) => {}
+                Ok(response) => {
+                    let _ = self
+                        .request("DELETE", &format!("/api/uploads/{upload_id}"), &self.auth, None, &[])
+                        .await;
+                    return Err(error_from_response(&response));
+                }
+                Err(error) => {
+                    let _ = self
+                        .request("DELETE", &format!("/api/uploads/{upload_id}"), &self.auth, None, &[])
+                        .await;
+                    return Err(error);
+                }
+            }
+            sent += length as u64;
+        }
+        let done = self
+            .request(
+                "POST",
+                &format!("/api/uploads/{upload_id}/complete"),
+                &self.auth,
+                None,
+                &[],
+            )
+            .await?;
+        let value = decode_json(&done)?;
         parse_item(value.get("item").ok_or_else(|| err("伺服器沒有回傳檔案"))?)
     }
 
@@ -361,8 +479,9 @@ fn decode_json(response: &RawResponse) -> Result<Value, ClientError> {
 fn error_from_response(response: &RawResponse) -> ClientError {
     if let Ok(value) = serde_json::from_slice::<Value>(&response.body) {
         let message = value
-            .get("error")
+            .get("message")
             .and_then(Value::as_str)
+            .or_else(|| value.get("error").and_then(Value::as_str))
             .unwrap_or("請求失敗")
             .to_string();
         let code = value
@@ -671,9 +790,8 @@ mod tests {
     async fn upload_rejects_oversize_without_a_request_and_sends_multipart() {
         let script = Script::new(vec![]);
         let client = CloudClient::new(script, "http://127.0.0.1:43123", AuthMaterial::Bearer { token: "t".into() });
-        let big = vec![0u8; (32 * 1024 * 1024) + 1];
-        let error = client.upload("a.bin", "application/octet-stream", &big, None).await.unwrap_err();
-        assert!(error.message.contains("32 MB"));
+        let error = ensure_upload_size(crate::validate::MAX_UPLOAD_BYTES + 1).unwrap_err();
+        assert!(error.message.contains("1 GB"));
         assert!(client.transport.requests.lock().unwrap().is_empty());
 
         let script = Script::new(vec![json_response(
