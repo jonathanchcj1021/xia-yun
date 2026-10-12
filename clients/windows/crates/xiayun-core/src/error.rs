@@ -24,7 +24,10 @@ impl ClientError {
 
 impl fmt::Display for ClientError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.message)
+        match self.code.as_deref() {
+            Some(code) if !code.is_empty() => write!(f, "{code}: {}", self.message),
+            _ => f.write_str(&self.message),
+        }
     }
 }
 

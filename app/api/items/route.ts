@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { MAX_REQUEST_BYTES, MAX_UPLOAD_BYTES } from "@/lib/constants";
+import { MAX_REQUEST_BYTES, MAX_UPLOAD_BYTES, SINGLE_UPLOAD_BYTES } from "@/lib/constants";
 import {
   cryptoErrorResponse,
   jsonError,
@@ -109,7 +109,7 @@ async function createUpload(request: NextRequest, userId: string) {
   const capped = await readCappedBytes(request, MAX_REQUEST_BYTES);
   if ("error" in capped) {
     if (capped.error === "too-large") {
-      return jsonError(413, "PAYLOAD_TOO_LARGE", "檔案超過 32 MB 上限");
+      return jsonError(413, "PAYLOAD_TOO_LARGE", "單次上傳超過上限，請改用分段上傳");
     }
     if (capped.error === "invalid-length") {
       return jsonError(411, "VALIDATION", "上傳請求需要 Content-Length");
@@ -133,7 +133,10 @@ async function createUpload(request: NextRequest, userId: string) {
     return jsonError(400, "VALIDATION", "請選擇要上傳的檔案");
   }
   if (uploaded.size > MAX_UPLOAD_BYTES) {
-    return jsonError(413, "PAYLOAD_TOO_LARGE", "檔案超過 32 MB 上限");
+    return jsonError(413, "PAYLOAD_TOO_LARGE", "檔案超過 1 GB 上限");
+  }
+  if (uploaded.size > SINGLE_UPLOAD_BYTES) {
+    return jsonError(413, "PAYLOAD_TOO_LARGE", "單次上傳超過上限，請改用分段上傳");
   }
 
   const mimeType = normalizeMime(uploaded.type || "application/octet-stream");
