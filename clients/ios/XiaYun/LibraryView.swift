@@ -131,7 +131,7 @@ struct LibraryView: View {
     private var addSheet: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 12) {
-                Text("單檔上限 32 MB。點陣圖會存成圖片，其餘存成檔案。")
+                Text("單檔上限 1 GB。點陣圖會存成圖片，其餘存成檔案。")
                     .font(.subheadline)
                     .foregroundStyle(palette.muted)
                 Button {

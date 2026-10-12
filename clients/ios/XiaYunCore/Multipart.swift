@@ -9,7 +9,8 @@ struct MultipartBody: Equatable {
         mimeType: String,
         fileData: Data,
         name: String?,
-        type: UploadType?
+        type: UploadType?,
+        group: String? = nil
     ) -> MultipartBody {
         let boundary = "xiayun-\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
         var body = Data()
@@ -18,6 +19,9 @@ struct MultipartBody: Equatable {
         }
         if let type {
             body.append(textField(name: "type", value: type.rawValue, boundary: boundary))
+        }
+        if let group, !group.isEmpty {
+            body.append(textField(name: "group", value: group, boundary: boundary))
         }
         body.append(utf8("--\(boundary)\r\n"))
         body.append(utf8(

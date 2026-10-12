@@ -75,4 +75,4 @@ cargo test -p xiayun-core
 XIAYUN_REQUIRE_LIVE=1 cargo test -p xiayun-core --test live_api
 ```
 
-單一檔案上限 32 MB。項目只屬於登入的使用者。
+單一檔案上限 1 GB。32 MB 以內一次送出；更大的檔案分段上傳，每段 8 MiB。項目只屬於登入的使用者。

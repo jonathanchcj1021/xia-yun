@@ -57,7 +57,7 @@ final class SupportTests: XCTestCase {
     func testByteFormatAndRaster() {
         XCTAssertEqual(ByteFormat.string(for: 500), "500 B")
         XCTAssertEqual(ByteFormat.string(for: 1536), "1.5 KB")
-        XCTAssertEqual(ByteFormat.string(for: Limits.maxUploadBytes), "32 MB")
+        XCTAssertEqual(ByteFormat.string(for: Limits.maxUploadBytes), "1 GB")
         XCTAssertTrue(RasterMime.isRaster("image/jpg"))
         XCTAssertEqual(RasterMime.normalized("image/x-png; charset=binary"), "image/png")
         XCTAssertFalse(RasterMime.isRaster("image/svg+xml"))

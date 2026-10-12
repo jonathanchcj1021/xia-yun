@@ -99,3 +99,47 @@ private fun createdMillis(item: CloudItem): Long = try {
 }
 
 private fun taiwanCollator(): Collator = Collator.getInstance(Locale.TAIWAN)
+
+fun assembleShareText(
+    extraText: String?,
+    extraSubject: String?,
+    clipText: String?,
+    clipHtml: String?,
+): String? {
+    fun clean(value: String?): String = value
+        ?.replace("\r\n", "\n")
+        ?.replace('\r', '\n')
+        ?.trim()
+        .orEmpty()
+    val text = clean(extraText)
+    val subject = clean(extraSubject)
+    val clip = clean(clipText)
+    val html = clean(clipHtml)
+    val primary = when {
+        text.isNotEmpty() -> text
+        clip.isNotEmpty() -> clip
+        html.isNotEmpty() -> html
+        else -> ""
+    }
+    if (primary.isEmpty() && subject.isEmpty()) return null
+    if (subject.isEmpty() || primary == subject || primary.contains(subject)) {
+        return primary.ifEmpty { subject }
+    }
+    val urlOnly = firstHttpUrl(primary) == primary
+    return if (urlOnly || primary.isEmpty()) "$subject\n$primary".trim() else "$primary\n$subject"
+}
+
+fun shareNote(raw: String, linkTitle: String, fallbackTitle: String): ShareNote? {
+    val body = raw.replace("\r\n", "\n").replace('\r', '\n').trim()
+    if (body.isEmpty()) return null
+    val url = firstHttpUrl(body)
+    val title = if (url != null && body == url) {
+        linkTitle
+    } else {
+        val line = body.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() }.orEmpty()
+        val clipped = line.take(Limits.MAX_NOTE_TITLE).trim()
+        if (clipped.isEmpty()) fallbackTitle else clipped
+    }
+    val safeTitle = title.trim().take(Limits.MAX_NOTE_TITLE).ifBlank { fallbackTitle }
+    return ShareNote(safeTitle, body)
+}
