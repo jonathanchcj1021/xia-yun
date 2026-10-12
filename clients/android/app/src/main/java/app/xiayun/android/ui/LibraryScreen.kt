@@ -1,5 +1,6 @@
 package app.xiayun.android.ui
 
+import android.content.ContentResolver
 import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -76,7 +77,6 @@ import app.xiayun.core.ApiResult
 import app.xiayun.core.CloudItem
 import app.xiayun.core.LinkPreview
 import app.xiayun.core.UNGROUPED_LABEL
-import app.xiayun.core.Upload
 import app.xiayun.core.canonicalGroup
 import app.xiayun.core.libraryGroupNames
 import kotlinx.coroutines.launch
@@ -89,7 +89,8 @@ fun LibraryScreen(
     biometricEnabled: Boolean,
     biometricAvailable: Boolean,
     onRefresh: () -> Unit,
-    onUpload: (List<Upload>) -> Unit,
+    onUpload: (List<StagedFile>, ContentResolver) -> Unit,
+    onDeleteMany: (List<String>) -> Unit,
     onCreateNote: (String, String, String?) -> Unit,
     onUpdateNote: (String, String, String, String?) -> Unit,
     onAddTag: (CloudItem, String) -> Unit,
@@ -124,45 +125,97 @@ fun LibraryScreen(
     var noteCustomName by remember { mutableStateOf("") }
     var noteGroupMenu by remember { mutableStateOf(false) }
     var noteError by remember { mutableStateOf<String?>(null) }
+    var pendingUploads by remember { mutableStateOf<List<StagedFile>?>(null) }
+    var uploadGroup by remember { mutableStateOf<String?>(null) }
+    var uploadGroupName by remember { mutableStateOf("") }
+    fun stageUploads(uploads: List<StagedFile>) {
+        if (uploads.isEmpty()) return
+        uploadGroup = null
+        uploadGroupName = ""
+        pendingUploads = uploads
+    }
     val openFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         scope.launch {
-            val uploads = mutableListOf<Upload>()
+            val uploads = mutableListOf<StagedFile>()
             for (uri in uris) {
-                when (val read = context.contentResolver.readUpload(uri, copy.cannotRead, copy.unnamedFile)) {
-                    is ReadUpload.Ok -> uploads += read.upload
-                    ReadUpload.TooLarge -> {
+                when (val read = context.contentResolver.stageUpload(uri, copy.cannotRead, copy.unnamedFile)) {
+                    is StageResult.Ready -> uploads += read.file
+                    StageResult.TooLarge -> {
                         onBanner(copy.tooLarge)
                         return@launch
                     }
-                    is ReadUpload.Failed -> {
+                    is StageResult.Failed -> {
                         onBanner(read.message)
                         return@launch
                     }
                 }
             }
-            onUpload(uploads)
+            stageUploads(uploads)
         }
     }
     val openImages = rememberLauncherForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(10),
     ) { uris ->
         scope.launch {
-            val uploads = mutableListOf<Upload>()
+            val uploads = mutableListOf<StagedFile>()
             for (uri in uris) {
-                when (val read = context.contentResolver.readUpload(uri, copy.cannotRead, copy.unnamedFile)) {
-                    is ReadUpload.Ok -> uploads += read.upload
-                    ReadUpload.TooLarge -> {
+                when (val read = context.contentResolver.stageUpload(uri, copy.cannotRead, copy.unnamedFile)) {
+                    is StageResult.Ready -> uploads += read.file
+                    StageResult.TooLarge -> {
                         onBanner(copy.tooLarge)
                         return@launch
                     }
-                    is ReadUpload.Failed -> {
+                    is StageResult.Failed -> {
                         onBanner(read.message)
                         return@launch
                     }
                 }
             }
-            onUpload(uploads)
+            stageUploads(uploads)
         }
+    }
+
+    val waiting = pendingUploads
+    if (waiting != null) {
+        AlertDialog(
+            onDismissRequest = { pendingUploads = null },
+            title = { Text(copy.uploadGroupTitle) },
+            text = {
+                Column(
+                    Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    libraryGroupNames(state.items.orEmpty()).forEach { name ->
+                        val chosen = canonicalGroup(name)
+                        val selected = uploadGroupName.isBlank() && canonicalGroup(uploadGroup) == chosen
+                        TextButton(onClick = {
+                            uploadGroup = chosen
+                            uploadGroupName = ""
+                        }) {
+                            Text(if (selected) "● ${displayGroup(name, copy)}" else displayGroup(name, copy))
+                        }
+                    }
+                    OutlinedTextField(
+                        value = uploadGroupName,
+                        onValueChange = { uploadGroupName = it },
+                        label = { Text(copy.newGroup) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val typed = uploadGroupName.trim()
+                    val group = canonicalGroup(if (typed.isNotEmpty()) typed else uploadGroup)
+                    onUpload(waiting.map { it.withGroup(group) }, context.contentResolver)
+                    pendingUploads = null
+                }) { Text(copy.save) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingUploads = null }) { Text(copy.cancel) }
+            },
+        )
     }
 
     val detail = state.detail
@@ -270,9 +323,21 @@ fun LibraryScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         if (state.uploading || state.savingNote) {
-                            LinearProgressIndicator(Modifier.fillMaxWidth())
+                            val fraction = state.uploadFraction
+                            if (fraction == null) {
+                                LinearProgressIndicator(Modifier.fillMaxWidth())
+                            } else {
+                                LinearProgressIndicator(
+                                    progress = { fraction },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
                             Text(
-                                if (state.savingNote) copy.savingNoteProgress else copy.uploading,
+                                when {
+                                    state.savingNote -> copy.savingNoteProgress
+                                    state.uploadDetail != null -> state.uploadDetail
+                                    else -> copy.uploading
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         }
@@ -341,6 +406,7 @@ fun LibraryScreen(
                     updatingId = state.updatingId,
                     onOpen = onOpen,
                     onDelete = onAskDelete,
+                    onDeleteMany = onDeleteMany,
                     onDeleteGroup = onAskDeleteGroup,
                     onAddTag = onAddTag,
                     onRemoveTag = onRemoveTag,

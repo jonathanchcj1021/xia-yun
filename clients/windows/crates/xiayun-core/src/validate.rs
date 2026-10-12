@@ -1,6 +1,8 @@
 use crate::error::{err, ClientError};
 
-pub const MAX_UPLOAD_BYTES: u64 = 32 * 1024 * 1024;
+pub const MAX_UPLOAD_BYTES: u64 = 1024 * 1024 * 1024;
+pub const SINGLE_UPLOAD_BYTES: u64 = 32 * 1024 * 1024;
+pub const UPLOAD_PART_BYTES: u64 = 8 * 1024 * 1024;
 pub const MAX_EMAIL_LENGTH: usize = 254;
 pub const MIN_PASSWORD_LENGTH: usize = 8;
 pub const MAX_PASSWORD_LENGTH: usize = 128;
@@ -147,7 +149,7 @@ pub fn normalize_upload_type(hint: Option<&str>, mime: &str) -> Result<String, C
 
 pub fn ensure_upload_size(size: u64) -> Result<(), ClientError> {
     if size > MAX_UPLOAD_BYTES {
-        Err(err("檔案超過 32 MB 上限"))
+        Err(err("檔案超過 1 GB 上限"))
     } else {
         Ok(())
     }

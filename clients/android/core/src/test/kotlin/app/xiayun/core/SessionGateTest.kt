@@ -34,6 +34,17 @@ class SessionGateTest {
     }
 
     @Test
+    fun shareSessionPrefersMemoryThenPlainToken() {
+        val live = AuthSession(token = "live", email = "a@b.co", userId = "u")
+        val stored = AuthSession(token = "stored", email = "a@b.co", userId = "u")
+        assertEquals(live, shareSession(live, null))
+        assertEquals(live, shareSession(live, stored))
+        assertEquals(stored, shareSession(null, stored))
+        assertEquals(stored, shareSession(AuthSession(token = "  "), stored))
+        assertNull(shareSession(null, AuthSession(token = "")))
+    }
+
+    @Test
     fun enabledWithoutEnvelopeDoesNotLockForever() {
         val store = MemorySessionStore()
         store.setBiometricEnabled(true)
