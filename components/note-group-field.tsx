@@ -9,6 +9,7 @@ export function NoteGroupField({
   custom,
   onSelected,
   onCustom,
+  idPrefix = "note",
   groupLabel = "分組",
   newGroupLabel = "新分組名稱",
   ungroupedLabel = UNGROUPED,
@@ -19,17 +20,20 @@ export function NoteGroupField({
   custom: string;
   onSelected: (value: string) => void;
   onCustom: (value: string) => void;
+  idPrefix?: string;
   groupLabel?: string;
   newGroupLabel?: string;
   ungroupedLabel?: string;
   placeholder?: string;
 }) {
+  const selectId = `${idPrefix}-group`;
+  const customId = `${idPrefix}-group-name`;
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex w-full flex-col gap-3">
       <div className="flex flex-col gap-2">
-        <Label htmlFor="note-group">{groupLabel}</Label>
+        <Label htmlFor={selectId}>{groupLabel}</Label>
         <select
-          id="note-group"
+          id={selectId}
           value={selected}
           onChange={(event) => onSelected(event.target.value)}
           className="h-11 rounded-lg border border-input bg-transparent px-3 text-base md:text-sm"
@@ -43,9 +47,9 @@ export function NoteGroupField({
         </select>
       </div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor="note-group-name">{newGroupLabel}</Label>
+        <Label htmlFor={customId}>{newGroupLabel}</Label>
         <Input
-          id="note-group-name"
+          id={customId}
           value={custom}
           onChange={(event) => onCustom(event.target.value)}
           className="h-11 text-base md:text-sm"

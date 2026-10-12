@@ -13,6 +13,10 @@ export class FieldCryptoError extends Error {
 
 let cachedKey: CryptoKey | null = null;
 
+export async function dataEncryptionKey() {
+  return encryptionKey();
+}
+
 async function encryptionKey() {
   if (cachedKey) return cachedKey;
   const raw = await keyMaterial();

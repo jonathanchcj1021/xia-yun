@@ -29,7 +29,7 @@ struct AuthView: View {
                     Text("檔案、圖片與筆記，放在你的帳號裡。")
                         .font(.title.weight(.semibold))
                         .fixedSize(horizontal: false, vertical: true)
-                    Text("內容只屬於這個帳號。單一檔案上限 32 MB。")
+                    Text("內容只屬於這個帳號。單一檔案上限 1 GB。")
                         .font(.subheadline)
                         .foregroundStyle(palette.muted)
                 }

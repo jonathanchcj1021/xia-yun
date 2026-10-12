@@ -9,6 +9,15 @@ import java.time.ZoneOffset
 
 class SupportTest {
     @Test
+    fun shortDeploySha() {
+        assertEquals("0dabb15", shortAppVersion("0dabb15b634fda06ec8132f4181569d70ae492e7"))
+        assertEquals("abcdef1", shortAppVersion(" ABCDEF1 "))
+        assertEquals("dev", shortAppVersion(null))
+        assertEquals("dev", shortAppVersion("dev"))
+        assertEquals("dev", shortAppVersion("0dabb1"))
+    }
+
+    @Test
     fun defaultBaseUrlIsTheLiveHttpsHost() {
         assertEquals(
             "https://xia-yun.jonathanchcj1021.workers.dev",

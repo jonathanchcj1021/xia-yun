@@ -40,7 +40,7 @@ Bundle ID 是 `app.xiayun.ios`。簽章用 Automatic，請在 Signing 填上自�
 
 ## 項目
 
-登入後可以上傳檔案、從照片加入圖片、寫筆記、預覽點陣圖、下載與刪除。筆記用 JSON `{ type: "text", title, body }`。檔案用 multipart 欄位 `file`，並帶 `name` 與 `type`（`file` 或 `image`）。顯示名稱放在 `name`，因為這支 API 的 multipart 解析器不接受 `filename*`。超過 32 MB 不會送出。
+登入後可以上傳檔案、從照片加入圖片、寫筆記、預覽點陣圖、下載與刪除。筆記用 JSON `{ type: "text", title, body }`。32 MB 以內的檔案用 multipart 欄位 `file`，並帶 `name` 與 `type`（`file` 或 `image`）。更大但不超過 1 GB 的檔案改走 `/api/uploads` 分段，每段 8 MiB。顯示名稱放在 `name`，因為這支 API 的 multipart 解析器不接受 `filename*`。超過 1 GB 不會送出。這個目錄沒有簽章，這裡不能產出可安裝的 iOS 套件。
 
 ## 在沒有 Xcode 的環境跑測試
 

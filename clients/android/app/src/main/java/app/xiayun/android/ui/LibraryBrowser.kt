@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -69,6 +70,7 @@ fun LibraryBrowser(
     updatingId: String?,
     onOpen: (CloudItem) -> Unit,
     onDelete: (CloudItem) -> Unit,
+    onDeleteMany: (List<String>) -> Unit,
     onDeleteGroup: (String, Int) -> Unit,
     onAddTag: (CloudItem, String) -> Unit,
     onRemoveTag: (CloudItem, String) -> Unit,
@@ -87,6 +89,8 @@ fun LibraryBrowser(
     var newGroupName by remember { mutableStateOf("") }
     var removeTarget by remember { mutableStateOf<Pair<CloudItem, String>?>(null) }
     var filterMessage by remember { mutableStateOf<String?>(null) }
+    var selected by remember { mutableStateOf(setOf<String>()) }
+    var confirmSelection by remember { mutableStateOf(false) }
     val copy = LocalAppCopy.current
 
     LaunchedEffect(notice) { filterMessage = null }
@@ -184,6 +188,18 @@ fun LibraryBrowser(
                 )
             }
         }
+        if (selected.isNotEmpty()) {
+            item {
+                Row(
+                    Modifier.widthIn(max = 720.dp).fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(fill(copy.deleteSelectedTitle, mapOf("count" to selected.size.toString())).removeSuffix("？").removeSuffix("?"))
+                    TextButton(onClick = { confirmSelection = true }) { Text(copy.deleteSelected) }
+                }
+            }
+        }
         if (!banner.isNullOrBlank()) {
             item {
                 Banner(knownMessage(banner, copy), onClearBanner, Modifier.widthIn(max = 720.dp))
@@ -246,6 +262,12 @@ fun LibraryBrowser(
                                 groupNames = groupNames,
                                 onOpen = { onOpen(item) },
                                 onDelete = { onDelete(item) },
+                                selected = item.id in selected,
+                                onToggleSelected = {
+                                    if (item.type != "text") {
+                                        selected = if (item.id in selected) selected - item.id else selected + item.id
+                                    }
+                                },
                                 onToggleTag = { tag ->
                                     tagFilter = if (tagFilter == tag) null else tag
                                     if (tagFilter == null) filterMessage = null
@@ -274,6 +296,25 @@ fun LibraryBrowser(
                 }
             }
         }
+    }
+
+    if (confirmSelection) {
+        AlertDialog(
+            onDismissRequest = { confirmSelection = false },
+            title = { Text(fill(copy.deleteSelectedTitle, mapOf("count" to selected.size.toString()))) },
+            text = { Text(fill(copy.deleteSelectedBody, mapOf("count" to selected.size.toString()))) },
+            confirmButton = {
+                TextButton(onClick = {
+                    val ids = selected.toList()
+                    selected = emptySet()
+                    confirmSelection = false
+                    onDeleteMany(ids)
+                }) { Text(copy.deleteSelected) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmSelection = false }) { Text(copy.cancel) }
+            },
+        )
     }
 
     val creating = newGroupFor
@@ -434,6 +475,8 @@ private fun ItemCard(
     groupNames: List<String>,
     onOpen: () -> Unit,
     onDelete: () -> Unit,
+    selected: Boolean,
+    onToggleSelected: () -> Unit,
     onToggleTag: (String) -> Unit,
     onStartTag: () -> Unit,
     onDraft: (String) -> Unit,
@@ -448,6 +491,12 @@ private fun ItemCard(
     Card(modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (item.type != "text") {
+                    Checkbox(
+                        checked = selected,
+                        onCheckedChange = { onToggleSelected() },
+                    )
+                }
                 Row(Modifier.weight(1f).clickable(onClick = onOpen), verticalAlignment = Alignment.CenterVertically) {
                     Icon(iconFor(item.type), contentDescription = displayType(item.type, LocalAppCopy.current), tint = MaterialTheme.colorScheme.primary)
                     Column(Modifier.padding(start = 12.dp).weight(1f)) {
